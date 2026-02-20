@@ -33,6 +33,7 @@ const AudioPlayer = forwardRef(({
     // Recording Refs
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
+    const activeStreamRef = useRef(null); // Track mic stream for cleanup
     const recordingStartOffsetRef = useRef(0); // To sync recording with song
     const [isRecording, setIsRecording] = useState(false);
     const [userPitchSegments, setUserPitchSegments] = useState([]); // Store recorded pitch
@@ -84,6 +85,9 @@ const AudioPlayer = forwardRef(({
                     }
                 });
 
+                // Store stream ref for cleanup
+                activeStreamRef.current = stream;
+
                 // 2. Select MimeType (Same as TestRecorder)
                 let options = {};
                 if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
@@ -93,7 +97,7 @@ const AudioPlayer = forwardRef(({
                 }
                 const actualMimeType = options.mimeType || 'audio/webm';
 
-                // 3. Create MediaRecorder WITH options (was missing before!)
+                // 3. Create MediaRecorder WITH options
                 const mediaRecorder = new MediaRecorder(stream, options);
                 mediaRecorderRef.current = mediaRecorder;
                 audioChunksRef.current = [];
@@ -110,7 +114,6 @@ const AudioPlayer = forwardRef(({
                 };
 
                 mediaRecorder.onstop = async () => {
-                    // Use the ACTUAL mimeType (was hardcoded to 'audio/webm' before!)
                     const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
 
                     // Analyze pitch
@@ -123,12 +126,28 @@ const AudioPlayer = forwardRef(({
 
                     onRecordingComplete && onRecordingComplete({ blob: audioBlob, segments });
 
-                    // Cleanup
-                    stream.getTracks().forEach(track => track.stop());
+                    // Cleanup stream tracks to reset audio session back to normal
+                    if (activeStreamRef.current) {
+                        activeStreamRef.current.getTracks().forEach(track => track.stop());
+                        activeStreamRef.current = null;
+                    }
                 };
 
                 mediaRecorder.start();
                 setIsRecording(true);
+
+                // MOBILE FIX: getUserMedia switches browser to "communication" mode
+                // which mutes other audio. Force WaveSurfer to resume after mic starts.
+                if (wavesurferRef.current) {
+                    setTimeout(() => {
+                        if (wavesurferRef.current && wavesurferRef.current.isPlaying()) {
+                            // Already playing, good
+                        } else if (wavesurferRef.current) {
+                            // Force resume - mobile may have paused it
+                            try { wavesurferRef.current.play(); } catch (e) { }
+                        }
+                    }, 300);
+                }
             } catch (err) {
                 console.error("Recording failed:", err);
             }
@@ -137,6 +156,11 @@ const AudioPlayer = forwardRef(({
             if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
                 mediaRecorderRef.current.stop();
                 setIsRecording(false);
+            }
+            // Also immediately stop mic stream to reset audio session
+            if (activeStreamRef.current) {
+                activeStreamRef.current.getTracks().forEach(track => track.stop());
+                activeStreamRef.current = null;
             }
         }
     }));
