@@ -124,12 +124,30 @@ function App() {
     setUserAudioUrl(url);
   };
 
-  const handlePlayRecording = () => {
+  const handlePlayRecording = async () => {
     if (userAudioUrl) {
       // Pause the song first so user only hears their recording
       if (isPlaying) setIsPlaying(false);
-      const audio = new Audio(userAudioUrl);
-      audio.play();
+
+      // MOBILE FIX: Use AudioContext instead of new Audio()
+      // new Audio() can route to phone earpiece; AudioContext routes to headphones
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const response = await fetch(userAudioUrl);
+        const arrayBuffer = await response.arrayBuffer();
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        const source = audioCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(audioCtx.destination);
+        source.start(0);
+        // Cleanup after playback
+        source.onended = () => audioCtx.close();
+      } catch (err) {
+        // Fallback to simple Audio
+        console.warn('AudioContext playback failed, using fallback:', err);
+        const audio = new Audio(userAudioUrl);
+        audio.play();
+      }
     }
   };
 
