@@ -18,15 +18,24 @@ const AudioPlayer = forwardRef(({
     showSargam,
     rootKey,
     notationMode, // 'axis' or 'floating'
+    isFullscreen,
     onReady,
     onFinish,
     onRegionCreated,
-    onPitchUpdate
+    onPitchUpdate,
+    onRecordingComplete // Callback with { audioBlob, pitchSegments }
 }, ref) => {
     const containerRef = useRef(null);
     const spectrogramRef = useRef(null);
     const wavesurferRef = useRef(null);
     const regionsPluginRef = useRef(null);
+
+    // Recording Refs
+    const mediaRecorderRef = useRef(null);
+    const audioChunksRef = useRef([]);
+    const recordingStartOffsetRef = useRef(0); // To sync recording with song
+    const [isRecording, setIsRecording] = useState(false);
+    const [userPitchSegments, setUserPitchSegments] = useState([]); // Store recorded pitch
 
     const [isReady, setIsReady] = useState(false);
     const [error, setError] = useState(null);
@@ -63,6 +72,72 @@ const AudioPlayer = forwardRef(({
         },
         clearRegions: () => {
             if (regionsPluginRef.current) regionsPluginRef.current.clearRegions();
+        },
+        startRecording: async () => {
+            try {
+                // All processing OFF — user listens via headphones, no speaker bleed
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    }
+                });
+
+                // 2. Select MimeType (Same as TestRecorder)
+                let options = {};
+                if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+                    options = { mimeType: 'audio/webm;codecs=opus' };
+                } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                    options = { mimeType: 'audio/mp4' };
+                }
+                const actualMimeType = options.mimeType || 'audio/webm';
+
+                // 3. Create MediaRecorder WITH options (was missing before!)
+                const mediaRecorder = new MediaRecorder(stream, options);
+                mediaRecorderRef.current = mediaRecorder;
+                audioChunksRef.current = [];
+
+                // Capture current song time as offset for sync
+                if (wavesurferRef.current) {
+                    recordingStartOffsetRef.current = wavesurferRef.current.getCurrentTime();
+                }
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunksRef.current.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = async () => {
+                    // Use the ACTUAL mimeType (was hardcoded to 'audio/webm' before!)
+                    const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
+
+                    // Analyze pitch
+                    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    const arrayBuffer = await audioBlob.arrayBuffer();
+                    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+                    const segments = await analyzeUserAudio(audioBuffer);
+                    setUserPitchSegments(segments);
+
+                    onRecordingComplete && onRecordingComplete({ blob: audioBlob, segments });
+
+                    // Cleanup
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                mediaRecorder.start();
+                setIsRecording(true);
+            } catch (err) {
+                console.error("Recording failed:", err);
+            }
+        },
+        stopRecording: () => {
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+                mediaRecorderRef.current.stop();
+                setIsRecording(false);
+            }
         }
     }));
 
@@ -84,51 +159,150 @@ const AudioPlayer = forwardRef(({
         return Math.round(69 + 12 * Math.log2(freq / 440));
     };
 
-    // Analyze Pitch & Generate Segments
+    // --- SHARED PITCH ANALYSIS LOGIC ---
+    const processBufferToSegments = (buffer) => {
+        const detectPitch = YIN({ sampleRate: buffer.sampleRate }); // Standard YIN
+        const channelData = buffer.getChannelData(0);
+        const bufferSize = 2048;
+        const pitches = [];
+
+        const timePerFrame = bufferSize / buffer.sampleRate;
+
+        for (let i = 0; i < channelData.length; i += bufferSize) {
+            const chunk = channelData.slice(i, i + bufferSize);
+            const frequency = detectPitch(chunk);
+            pitches.push(frequency);
+        }
+
+        const segments = [];
+        for (let i = 0; i < pitches.length; i++) {
+            const freq = pitches[i];
+
+            // Basic noise gate (shared)
+            if (!freq || freq < 60 || freq > 1100) continue;
+
+            segments.push({
+                startTime: i * timePerFrame,
+                endTime: (i + 1) * timePerFrame,
+                freq: freq
+            });
+        }
+        return { pitches, segments };
+    };
+
+    // Analyze Algorithm (File Upload)
     const analyzePitch = async (buffer) => {
         try {
-            const detectPitch = YIN({ sampleRate: buffer.sampleRate });
-            const channelData = buffer.getChannelData(0);
-            const bufferSize = 2048;
-            const pitches = [];
-
-            const duration = buffer.duration;
-            const timePerFrame = bufferSize / buffer.sampleRate;
-
-            for (let i = 0; i < channelData.length; i += bufferSize) {
-                const chunk = channelData.slice(i, i + bufferSize);
-                const frequency = detectPitch(chunk);
-                pitches.push(frequency);
-            }
+            console.log("Analyzing File Pitch...");
+            const { pitches, segments } = processBufferToSegments(buffer);
 
             setPitchData(pitches); // Keep for current note display
-            setDecodingDuration(duration);
+            setDecodingDuration(buffer.duration);
+            setPitchSegments(segments);
 
-            // --- CONTINUOUS RIBBON LOGIC ---
-            // Instead of grouping, we map every valid frame to a segment
-            // This ensures no data is lost and the line is continuous
-            const segments = [];
+            console.log("Pitch analysis complete. Frames:", segments.length);
+        } catch (e) {
+            console.error("Pitch analysis failed:", e);
+        }
+    };
 
-            for (let i = 0; i < pitches.length; i++) {
-                const freq = pitches[i];
+    // Analyze User Recording — specialized for mic input
+    const analyzeUserAudio = async (buffer) => {
+        try {
+            console.log("Analyzing User Recording...");
+            console.log(`Buffer: ${buffer.duration.toFixed(2)}s, SR: ${buffer.sampleRate}`);
 
-                // Basic noise gate
-                if (!freq || freq < 60 || freq > 1100) {
-                    continue;
+            // 1. NORMALIZE: Mic recordings are much quieter than files
+            const rawData = buffer.getChannelData(0);
+            let maxAmp = 0;
+            for (let i = 0; i < rawData.length; i++) {
+                const abs = Math.abs(rawData[i]);
+                if (abs > maxAmp) maxAmp = abs;
+            }
+            console.log(`Max amplitude: ${maxAmp.toFixed(4)}`);
+
+            if (maxAmp > 0.001) {
+                const gain = 0.9 / maxAmp; // Normalize to 90% peak
+                for (let i = 0; i < rawData.length; i++) {
+                    rawData[i] *= gain;
                 }
+                console.log(`Normalized with gain: ${gain.toFixed(2)}x`);
+            }
 
-                segments.push({
-                    startTime: i * timePerFrame,
-                    endTime: (i + 1) * timePerFrame,
+            // 2. DETECT PITCH — same accuracy as file analysis + overlap for more data
+            // threshold=0.15 (slightly more lenient than file analysis for accuracy)
+            // Keep overlap for density, normalization handles the quiet signal
+            const detectPitch = YIN({
+                sampleRate: buffer.sampleRate,
+                threshold: 0.15,
+                probabilityThreshold: 0.05
+            });
+            const windowSize = 2048;  // Reliable for YIN
+            const hopSize = 512;      // 4x overlap = 4x more data points
+            const timePerHop = hopSize / buffer.sampleRate;
+            const pitches = [];
+
+            for (let i = 0; i + windowSize <= rawData.length; i += hopSize) {
+                const chunk = rawData.slice(i, i + windowSize);
+                const frequency = detectPitch(chunk);
+                pitches.push({ time: i / buffer.sampleRate, freq: frequency });
+            }
+
+            console.log(`Total frames: ${pitches.length}`);
+            const validCount = pitches.filter(p => p.freq && p.freq > 50 && p.freq < 1200).length;
+            console.log(`Valid detections: ${validCount} (${(validCount / pitches.length * 100).toFixed(1)}%)`)
+
+            // 3. BUILD RAW SEGMENTS
+            const rawSegments = [];
+            for (let i = 0; i < pitches.length; i++) {
+                const { time, freq } = pitches[i];
+                if (!freq || freq < 50 || freq > 1200) continue;
+                rawSegments.push({
+                    startTime: time,
+                    endTime: time + timePerHop,
                     freq: freq
                 });
             }
 
-            setPitchSegments(segments);
-            console.log("Pitch analysis complete. Frames:", segments.length);
+            // 4. MEDIAN FILTER — remove spike outliers
+            const smoothedSegments = [];
+            for (let i = 0; i < rawSegments.length; i++) {
+                const prev = i > 0 ? rawSegments[i - 1].freq : rawSegments[i].freq;
+                const curr = rawSegments[i].freq;
+                const next = i < rawSegments.length - 1 ? rawSegments[i + 1].freq : curr;
+                const sorted = [prev, curr, next].sort((a, b) => a - b);
+                smoothedSegments.push({
+                    ...rawSegments[i],
+                    freq: sorted[1]
+                });
+            }
 
+            // 5. FILL GAPS up to 1.5s with interpolation
+            const filledSegments = [];
+            for (let i = 0; i < smoothedSegments.length; i++) {
+                filledSegments.push(smoothedSegments[i]);
+
+                if (i < smoothedSegments.length - 1) {
+                    const gap = smoothedSegments[i + 1].startTime - smoothedSegments[i].endTime;
+                    if (gap > 0 && gap < 1.5) {
+                        const steps = Math.max(1, Math.round(gap / timePerHop));
+                        for (let s = 1; s <= steps; s++) {
+                            const t = s / (steps + 1);
+                            filledSegments.push({
+                                startTime: smoothedSegments[i].endTime + (s - 1) * timePerHop,
+                                endTime: smoothedSegments[i].endTime + s * timePerHop,
+                                freq: smoothedSegments[i].freq * (1 - t) + smoothedSegments[i + 1].freq * t
+                            });
+                        }
+                    }
+                }
+            }
+
+            console.log(`User Analysis Done. Raw: ${rawSegments.length}, Filled: ${filledSegments.length}`);
+            return filledSegments;
         } catch (e) {
-            console.error("Pitch analysis failed:", e);
+            console.error("User Analysis Failed:", e);
+            return [];
         }
     };
 
@@ -477,6 +651,77 @@ const AudioPlayer = forwardRef(({
             drawSmoothCurve(ctx, path, 1.0);
         });
 
+        allPaths.forEach(path => {
+            drawSmoothCurve(ctx, path, 1.0);
+        });
+
+        // --- 3. DRAW USER PITCH (Recorded - Orange) ---
+        if (userPitchSegments && userPitchSegments.length > 0) {
+            // DIAGNOSTIC LOGGING (remove after debugging)
+            if (!window._orangeLineLogged) {
+                window._orangeLineLogged = true;
+                const firstSeg = userPitchSegments[0];
+                const lastSeg = userPitchSegments[userPitchSegments.length - 1];
+                const freqs = userPitchSegments.map(s => s.freq);
+                const minFreq = Math.min(...freqs);
+                const maxFreq = Math.max(...freqs);
+                console.log("=== ORANGE LINE DEBUG ===");
+                console.log(`Total segments: ${userPitchSegments.length}`);
+                console.log(`Time range: ${firstSeg.startTime.toFixed(3)}s → ${lastSeg.endTime.toFixed(3)}s`);
+                console.log(`Freq range: ${minFreq.toFixed(1)}Hz → ${maxFreq.toFixed(1)}Hz`);
+                console.log(`Recording offset: ${recordingStartOffsetRef.current}`);
+                console.log(`pxPerSec: ${pxPerSec.toFixed(2)}, canvas width: ${width}`);
+                console.log(`Duration: ${duration.toFixed(2)}s`);
+                console.log("First 5 segments:", userPitchSegments.slice(0, 5));
+                console.log("Last 5 segments:", userPitchSegments.slice(-5));
+                console.log("========================");
+            }
+
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#F97316'; // Orange-500
+            ctx.shadowColor = '#F97316';
+            ctx.shadowBlur = 10;
+
+            let userPath = [];
+            let allUserPaths = [];
+            let lastUserEndTime = -1;
+
+            // Apply recording offset so orange line aligns with song position
+            const offset = recordingStartOffsetRef.current || 0;
+
+            for (let i = 0; i < userPitchSegments.length; i++) {
+                const seg = userPitchSegments[i];
+                const adjustedTime = seg.startTime + offset;
+
+                const x = adjustedTime * pxPerSec;
+                const y = getFreqY(seg.freq, height);
+
+                // Use same gap tolerance as green line (3.0s) for smooth continuous line
+                if (userPath.length > 0 && (seg.startTime - lastUserEndTime) < 3.0) {
+                    userPath.push({ x, y });
+                } else {
+                    if (userPath.length > 0) allUserPaths.push(userPath);
+                    userPath = [{ x, y }];
+                }
+                lastUserEndTime = seg.endTime;
+            }
+            if (userPath.length > 0) allUserPaths.push(userPath);
+
+            // LOG path info
+            if (!window._orangePathLogged) {
+                window._orangePathLogged = true;
+                console.log(`Orange: ${allUserPaths.length} paths, points per path: [${allUserPaths.map(p => p.length).join(', ')}]`);
+                if (allUserPaths.length > 0 && allUserPaths[0].length > 0) {
+                    console.log(`First path x range: ${allUserPaths[0][0].x.toFixed(1)} → ${allUserPaths[0][allUserPaths[0].length - 1].x.toFixed(1)}`);
+                    console.log(`First path y range: ${Math.min(...allUserPaths[0].map(p => p.y)).toFixed(1)} → ${Math.max(...allUserPaths[0].map(p => p.y)).toFixed(1)}`);
+                }
+            }
+
+            allUserPaths.forEach(path => {
+                drawSmoothCurve(ctx, path, 1.0);
+            });
+        }
+
         ctx.shadowBlur = 0;
 
         // Note: Floating Badges logic removed from here too? 
@@ -514,7 +759,7 @@ const AudioPlayer = forwardRef(({
             });
         }
 
-    }, [pitchSegments, isReady, zoom, showSpectrogram, showSargam, rootKey, notationMode, stableNotes]); // Removed activeNote!
+    }, [pitchSegments, isReady, zoom, showSpectrogram, showSargam, rootKey, notationMode, stableNotes, userPitchSegments]);
 
     // Watchers guarded by isReady
     useEffect(() => {
@@ -542,7 +787,7 @@ const AudioPlayer = forwardRef(({
     }, [volume, isReady]);
 
     return (
-        <div className="w-full bg-black/20 rounded-xl p-4 backdrop-blur-sm border border-white/10 relative min-h-[180px] flex flex-col justify-center gap-4">
+        <div className={`w-full bg-black/20 backdrop-blur-sm border border-white/10 relative flex flex-col justify-center gap-4 ${isFullscreen ? 'h-full rounded-none p-2 border-0' : 'rounded-xl p-4 min-h-[180px]'}`}>
 
             {/* Axis Overlay - Fixed Left */}
             {isReady && notationMode === 'axis' && (

@@ -8,7 +8,9 @@ import {
     ZoomIn,
     ZoomOut,
     FastForward,
-    Rewind
+    Rewind,
+    Mic,
+    PlayCircle
 } from 'lucide-react';
 
 const Controls = ({
@@ -21,7 +23,11 @@ const Controls = ({
     zoom,
     onZoomChange,
     onSkipBackward,
-    onSkipForward
+    onSkipForward,
+    isRecording,
+    onRecordToggle,
+    userAudioUrl,
+    onPlayRecording
 }) => {
     const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -43,11 +49,30 @@ const Controls = ({
 
                     <button
                         onClick={onTogglePlay}
-                        className={`p-5 rounded-full transition shadow-lg flex items-center justify-center ${isPlaying ? 'bg-red-500 hover:bg-red-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
+                        className={`p-5 rounded-full transition shadow-lg flex items-center justify-center ${isPlaying ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
                         title={isPlaying ? "Pause" : "Play"}
                     >
                         {isPlaying ? <Pause size={32} fill="white" /> : <Play size={32} fill="white" className="ml-1" />}
                     </button>
+
+                    <button
+                        onClick={onRecordToggle}
+                        className={`p-4 rounded-full transition shadow-lg flex items-center justify-center ${isRecording ? 'bg-red-600 animate-pulse ring-4 ring-red-500/30' : 'bg-gray-700 hover:bg-gray-600 text-white'}`}
+                        title={isRecording ? "Stop Recording" : "Start Recording"}
+                    >
+                        <Mic size={24} />
+                    </button>
+
+                    {/* Play My Recording Button (Mobile Friendly) */}
+                    {userAudioUrl && (
+                        <button
+                            onClick={onPlayRecording}
+                            className="p-3 bg-orange-600 hover:bg-orange-700 rounded-full transition text-white shadow-lg animate-in zoom-in"
+                            title="Play My Recording"
+                        >
+                            <PlayCircle size={24} />
+                        </button>
+                    )}
 
                     <button
                         onClick={onSkipForward}
@@ -67,8 +92,8 @@ const Controls = ({
                                 key={rate}
                                 onClick={() => onPlaybackRateChange(rate)}
                                 className={`px-3 py-1 rounded text-sm font-bold transition-all ${playbackRate === rate
-                                        ? 'bg-indigo-600 text-white shadow-md transform scale-105'
-                                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                    ? 'bg-indigo-600 text-white shadow-md transform scale-105'
+                                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                                     }`}
                             >
                                 {rate}x
