@@ -106,10 +106,9 @@ function App() {
 
   const handleRecordToggle = () => {
     if (isRecording) {
-      // STOP
+      // STOP — keep song playing so user can compare
       playerRef.current?.stopRecording();
       setIsRecording(false);
-      if (isPlaying) setIsPlaying(false);
     } else {
       // START — song keeps playing, echoCancellation is forced OFF in AudioPlayer
       playerRef.current?.startRecording();
@@ -125,29 +124,24 @@ function App() {
   };
 
   const handlePlayRecording = async () => {
-    if (userAudioUrl) {
-      // Pause the song first so user only hears their recording
-      if (isPlaying) setIsPlaying(false);
-
-      // MOBILE FIX: Use AudioContext instead of new Audio()
-      // new Audio() can route to phone earpiece; AudioContext routes to headphones
-      try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const response = await fetch(userAudioUrl);
-        const arrayBuffer = await response.arrayBuffer();
-        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-        const source = audioCtx.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(audioCtx.destination);
-        source.start(0);
-        // Cleanup after playback
-        source.onended = () => audioCtx.close();
-      } catch (err) {
-        // Fallback to simple Audio
-        console.warn('AudioContext playback failed, using fallback:', err);
-        const audio = new Audio(userAudioUrl);
-        audio.play();
-      }
+    if (!userAudioUrl) return;
+    // Pause song first so user only hears their recording
+    if (isPlaying) setIsPlaying(false);
+    try {
+      // Use AudioContext so audio routes through headphones (not forced to speaker on mobile)
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const response = await fetch(userAudioUrl);
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      const source = audioCtx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(audioCtx.destination);
+      source.start(0);
+    } catch (e) {
+      // Fallback to basic Audio element
+      console.warn('AudioContext playback failed, using Audio element:', e);
+      const audio = new Audio(userAudioUrl);
+      audio.play();
     }
   };
 

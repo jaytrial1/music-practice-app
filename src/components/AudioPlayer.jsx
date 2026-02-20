@@ -84,21 +84,6 @@ const AudioPlayer = forwardRef(({
                     }
                 });
 
-                // MOBILE FIX: getUserMedia can suspend other AudioContexts
-                // Resume WaveSurfer's AudioContext so the song keeps playing
-                if (wavesurferRef.current) {
-                    const backend = wavesurferRef.current.getMediaElement();
-                    // WaveSurfer internally uses an AudioContext, poke it to resume
-                    try {
-                        const wsAudioCtx = wavesurferRef.current?.options?.backend === 'WebAudio'
-                            ? wavesurferRef.current.backend?.ac
-                            : null;
-                        if (wsAudioCtx && wsAudioCtx.state === 'suspended') {
-                            await wsAudioCtx.resume();
-                        }
-                    } catch (e) { /* ignore */ }
-                }
-
                 // 2. Select MimeType (Same as TestRecorder)
                 let options = {};
                 if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
@@ -108,7 +93,7 @@ const AudioPlayer = forwardRef(({
                 }
                 const actualMimeType = options.mimeType || 'audio/webm';
 
-                // 3. Create MediaRecorder WITH options
+                // 3. Create MediaRecorder WITH options (was missing before!)
                 const mediaRecorder = new MediaRecorder(stream, options);
                 mediaRecorderRef.current = mediaRecorder;
                 audioChunksRef.current = [];
@@ -125,6 +110,7 @@ const AudioPlayer = forwardRef(({
                 };
 
                 mediaRecorder.onstop = async () => {
+                    // Use the ACTUAL mimeType (was hardcoded to 'audio/webm' before!)
                     const audioBlob = new Blob(audioChunksRef.current, { type: actualMimeType });
 
                     // Analyze pitch
@@ -143,19 +129,6 @@ const AudioPlayer = forwardRef(({
 
                 mediaRecorder.start();
                 setIsRecording(true);
-
-                // MOBILE FIX: After starting recording, nudge WaveSurfer to keep playing
-                // Some mobile browsers pause media elements when mic activates
-                setTimeout(async () => {
-                    if (wavesurferRef.current) {
-                        try {
-                            const mediaEl = wavesurferRef.current.getMediaElement();
-                            if (mediaEl && mediaEl.paused) {
-                                await mediaEl.play();
-                            }
-                        } catch (e) { /* ignore */ }
-                    }
-                }, 200);
             } catch (err) {
                 console.error("Recording failed:", err);
             }
