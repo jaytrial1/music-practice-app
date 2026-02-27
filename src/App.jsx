@@ -501,9 +501,6 @@ function App() {
                   rootKey={rootKey}
                   notationMode={notationMode}
                   isFullscreen={isFullscreen}
-                  onReady={(duration) => {
-                    setDecodingDuration(duration);
-                  }}
                   onFinish={() => setIsPlaying(false)}
                   onRecordingComplete={handleRecordingComplete}
                 />
