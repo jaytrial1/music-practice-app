@@ -468,61 +468,36 @@ function App() {
                   </div>
 
                   {/* BOTTOM-CENTER: Main Controls */}
-                  <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 z-20 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-                    <div className="flex items-center gap-3 bg-gray-900/90 backdrop-blur-xl px-6 py-3 rounded-2xl border border-gray-700/50 shadow-2xl">
-                      {/* Skip Back */}
+                  <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
+
+                    {/* Zoom / Extra Controls (Top Row) */}
+                    <div className="flex items-center gap-4 bg-gray-900/90 backdrop-blur-xl px-4 py-2 rounded-xl border border-gray-700/50 shadow-xl">
                       <button
-                        onClick={(e) => { e.stopPropagation(); handleSkipBackward(); resetFsTimer(); }}
-                        className="p-2 text-gray-400 hover:text-white transition"
+                        onClick={(e) => { e.stopPropagation(); setZoom(z => Math.max(10, z - 30)); resetFsTimer(); }}
+                        className="p-1 text-gray-400 hover:text-white transition"
                       >
-                        <Rewind size={20} />
+                        <ZoomOut size={16} />
                       </button>
-
-                      {/* Play/Pause */}
+                      <span className="text-xs text-gray-500 font-bold tracking-wider uppercase">Zoom</span>
                       <button
-                        onClick={(e) => { e.stopPropagation(); togglePlay(); resetFsTimer(); }}
-                        className={`p-4 rounded-full transition shadow-lg ${isPlaying ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
+                        onClick={(e) => { e.stopPropagation(); setZoom(z => Math.min(500, z + 30)); resetFsTimer(); }}
+                        className="p-1 text-gray-400 hover:text-white transition"
                       >
-                        {isPlaying ? <Pause size={24} fill="white" /> : <Play size={24} fill="white" className="ml-0.5" />}
+                        <ZoomIn size={16} />
                       </button>
+                    </div>
 
-                      {/* Record */}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleRecordToggle(); resetFsTimer(); }}
-                        className={`p-3 rounded-full transition ${isRecording ? 'bg-red-600 animate-pulse ring-4 ring-red-500/30' : 'bg-gray-700 hover:bg-gray-600 text-white'}`}
-                      >
-                        <Mic2 size={20} />
-                      </button>
+                    {/* Main Actions (Bottom Row) */}
+                    <div className="flex items-center gap-4 bg-gray-900/90 backdrop-blur-xl px-6 py-3 rounded-2xl border border-gray-700/50 shadow-2xl">
 
-                      {/* Play My Recording */}
-                      {userAudioUrl && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handlePlayRecording(); resetFsTimer(); }}
-                          className="p-3 bg-orange-600 hover:bg-orange-700 rounded-full transition text-white shadow-lg"
-                          title="Play My Recording"
-                        >
-                          <PlayCircle size={20} />
-                        </button>
-                      )}
-
-                      {/* Skip Forward */}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleSkipForward(); resetFsTimer(); }}
-                        className="p-2 text-gray-400 hover:text-white transition"
-                      >
-                        <FastForward size={20} />
-                      </button>
-
-                      {/* Divider */}
-                      <div className="w-px h-8 bg-gray-700 mx-1"></div>
-
-                      {/* Speed */}
-                      <div className="flex items-center gap-1">
+                      {/* Speed Control (Moved to Left) */}
+                      <div className="flex items-center gap-1.5 bg-gray-800/80 px-2 py-1.5 rounded-xl border border-gray-700/50">
+                        <span className="text-[10px] text-gray-400 font-bold uppercase ml-1 mr-1 hidden sm:inline">Speed</span>
                         {[0.5, 0.75, 1, 1.25, 1.5].map(rate => (
                           <button
                             key={rate}
                             onClick={(e) => { e.stopPropagation(); setPlaybackRate(rate); resetFsTimer(); }}
-                            className={`px-2 py-1 rounded text-xs font-bold transition ${playbackRate === rate ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                            className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${playbackRate === rate ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
                           >
                             {rate}x
                           </button>
@@ -530,43 +505,69 @@ function App() {
                       </div>
 
                       {/* Divider */}
-                      <div className="w-px h-8 bg-gray-700 mx-1"></div>
+                      <div className="w-px h-8 bg-gray-700 mx-1 hidden sm:block"></div>
 
-                      {/* Zoom */}
-                      <div className="flex items-center gap-2">
+                      {/* Playback Controls (Moved to Middle) */}
+                      <div className="flex items-center gap-3">
                         <button
-                          onClick={(e) => { e.stopPropagation(); setZoom(z => Math.max(10, z - 30)); resetFsTimer(); }}
-                          className="p-1.5 text-gray-400 hover:text-white transition"
+                          onClick={(e) => { e.stopPropagation(); handleSkipBackward(); resetFsTimer(); }}
+                          className="p-2 text-gray-400 hover:text-white transition"
                         >
-                          <ZoomOut size={18} />
+                          <Rewind size={20} />
                         </button>
+
                         <button
-                          onClick={(e) => { e.stopPropagation(); setZoom(z => Math.min(500, z + 30)); resetFsTimer(); }}
-                          className="p-1.5 text-gray-400 hover:text-white transition"
+                          onClick={(e) => { e.stopPropagation(); togglePlay(); resetFsTimer(); }}
+                          className={`p-4 rounded-full transition shadow-lg ${isPlaying ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
                         >
-                          <ZoomIn size={18} />
+                          {isPlaying ? <Pause size={24} fill="white" /> : <Play size={24} fill="white" className="ml-0.5" />}
+                        </button>
+
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleRecordToggle(); resetFsTimer(); }}
+                          className={`p-3 rounded-full transition ${isRecording ? 'bg-red-600 animate-pulse ring-4 ring-red-500/30' : 'bg-gray-700 hover:bg-gray-600 text-white'}`}
+                        >
+                          <Mic2 size={20} />
+                        </button>
+
+                        {/* Play My Recording */}
+                        {userAudioUrl && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handlePlayRecording(); resetFsTimer(); }}
+                            className="p-3 bg-orange-600 hover:bg-orange-700 rounded-full transition text-white shadow-lg"
+                            title="Play My Recording"
+                          >
+                            <PlayCircle size={20} />
+                          </button>
+                        )}
+
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleSkipForward(); resetFsTimer(); }}
+                          className="p-2 text-gray-400 hover:text-white transition"
+                        >
+                          <FastForward size={20} />
                         </button>
                       </div>
 
                       {/* Divider */}
-                      <div className="w-px h-8 bg-gray-700 mx-1"></div>
+                      <div className="w-px h-8 bg-gray-700 mx-1 hidden sm:block"></div>
 
-                      {/* Loop */}
-                      <div className="flex items-center gap-1">
+                      {/* Loop Controls (Right) */}
+                      <div className="flex items-center gap-2">
                         <button
                           onClick={(e) => { e.stopPropagation(); handleAddRegion(); resetFsTimer(); }}
-                          className="flex items-center gap-1 px-2 py-1.5 bg-indigo-600/80 hover:bg-indigo-700 rounded-lg text-white text-xs font-medium transition"
+                          className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 border border-indigo-500 hover:bg-indigo-500 rounded-xl text-white text-sm font-bold transition shadow-md"
                           title="Set Loop"
                         >
-                          <Flag size={14} />
+                          <Flag size={16} />
                           <span>Loop</span>
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleClearRegions(); resetFsTimer(); }}
-                          className="p-1.5 text-gray-400 hover:text-red-400 transition"
+                          className="p-2 bg-gray-800/80 hover:bg-red-900/80 rounded-xl border border-gray-700/50 hover:border-red-500/50 text-gray-400 hover:text-red-300 transition"
                           title="Clear Loops"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={18} />
                         </button>
                       </div>
                     </div>
