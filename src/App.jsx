@@ -61,14 +61,30 @@ function App() {
   }, [showFsControls, resetFsTimer, autoHideEnabled]);
 
   // Fullscreen toggle
-  const toggleFullscreen = () => {
+  const toggleFullscreen = async () => {
     if (!visualizerContainerRef.current) return;
-    if (!document.fullscreenElement) {
-      visualizerContainerRef.current.requestFullscreen().catch(err => {
-        console.error('Fullscreen error:', err);
-      });
-    } else {
-      document.exitFullscreen();
+    try {
+      if (!document.fullscreenElement) {
+        await visualizerContainerRef.current.requestFullscreen();
+        if (window.screen && window.screen.orientation && window.screen.orientation.lock) {
+          try {
+            await window.screen.orientation.lock('landscape');
+          } catch (e) {
+            console.warn('Screen orientation lock failed:', e);
+          }
+        }
+      } else {
+        if (window.screen && window.screen.orientation && window.screen.orientation.unlock) {
+          try {
+            window.screen.orientation.unlock();
+          } catch (e) {
+            console.warn('Screen orientation unlock failed:', e);
+          }
+        }
+        await document.exitFullscreen();
+      }
+    } catch (err) {
+      console.error('Fullscreen error:', err);
     }
   };
 
@@ -77,11 +93,21 @@ function App() {
     const handler = () => {
       const fs = !!document.fullscreenElement;
       setIsFullscreen(fs);
+
       if (fs) {
         setShowFsControls(true);
         if (fsTimerRef.current) clearTimeout(fsTimerRef.current);
         if (autoHideEnabled) {
           fsTimerRef.current = setTimeout(() => setShowFsControls(false), 3000);
+        }
+      } else {
+        // Unlocking on exit via ESC
+        if (window.screen && window.screen.orientation && window.screen.orientation.unlock) {
+          try {
+            window.screen.orientation.unlock();
+          } catch (e) {
+            console.warn('Screen orientation unlock failed:', e);
+          }
         }
       }
     };
