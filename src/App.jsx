@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import AudioPlayer from './components/AudioPlayer';
 import Controls from './components/Controls';
 import TestRecorder from './components/TestRecorder';
-import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle } from 'lucide-react';
+import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff } from 'lucide-react';
 
 // Sargam Mapping Helpers
 const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -28,14 +28,17 @@ function App() {
   const visualizerContainerRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showFsControls, setShowFsControls] = useState(true);
+  const [autoHideEnabled, setAutoHideEnabled] = useState(true);
   const fsTimerRef = useRef(null);
 
   // Auto-hide fullscreen controls after 3 seconds
   const resetFsTimer = useCallback(() => {
     if (fsTimerRef.current) clearTimeout(fsTimerRef.current);
     setShowFsControls(true);
-    fsTimerRef.current = setTimeout(() => setShowFsControls(false), 3000);
-  }, []);
+    if (autoHideEnabled) {
+      fsTimerRef.current = setTimeout(() => setShowFsControls(false), 3000);
+    }
+  }, [autoHideEnabled]);
 
   // Click/tap handler for fullscreen — toggle controls
   const handleFsClick = useCallback((e) => {
@@ -71,7 +74,9 @@ function App() {
       if (fs) {
         setShowFsControls(true);
         if (fsTimerRef.current) clearTimeout(fsTimerRef.current);
-        fsTimerRef.current = setTimeout(() => setShowFsControls(false), 3000);
+        if (autoHideEnabled) {
+          fsTimerRef.current = setTimeout(() => setShowFsControls(false), 3000);
+        }
       }
     };
     document.addEventListener('fullscreenchange', handler);
@@ -79,7 +84,7 @@ function App() {
       document.removeEventListener('fullscreenchange', handler);
       if (fsTimerRef.current) clearTimeout(fsTimerRef.current);
     };
-  }, []);
+  }, [autoHideEnabled]);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -397,26 +402,58 @@ function App() {
               {/* ===== FULLSCREEN OVERLAY CONTROLS (YouTube-style) ===== */}
               {isFullscreen && (
                 <>
-                  {/* TOP-LEFT: Axis/Floating Mode + Sargam */}
+                  {/* TOP-LEFT: Axis/Floating Mode + Sargam + Root Key */}
                   <div className={`absolute top-4 left-4 z-20 flex items-center gap-2 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
                     <button
                       onClick={(e) => { e.stopPropagation(); setNotationMode(prev => prev === 'axis' ? 'floating' : 'axis'); resetFsTimer(); }}
                       className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition backdrop-blur-md ${notationMode === 'floating' ? 'bg-amber-500/90 text-white' : 'bg-gray-800/80 text-gray-300 hover:bg-gray-700/80'}`}
                     >
                       <Activity size={16} />
-                      <span>{notationMode === 'axis' ? 'Axis' : 'Float'}</span>
+                      <span className="hidden sm:inline">{notationMode === 'axis' ? 'Axis' : 'Float'}</span>
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); setShowSargam(!showSargam); resetFsTimer(); }}
                       className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition backdrop-blur-md ${showSargam ? 'bg-indigo-600/90 text-white' : 'bg-gray-800/80 text-gray-300 hover:bg-gray-700/80'}`}
                     >
                       <Music2 size={16} />
-                      <span>{showSargam ? 'Sa Re' : 'A B C'}</span>
+                      <span className="hidden sm:inline">{showSargam ? 'Sa Re' : 'A B C'}</span>
                     </button>
+
+                    {/* Root Key Selector */}
+                    <div className="flex items-center gap-2 bg-gray-800/80 px-3 py-2 rounded-lg border border-gray-700 backdrop-blur-md" onClick={(e) => e.stopPropagation()}>
+                      <span className="text-xs text-gray-400 uppercase font-bold hidden sm:inline">Sa</span>
+                      <select
+                        value={rootKey}
+                        onChange={(e) => { setRootKey(e.target.value); resetFsTimer(); }}
+                        className="bg-transparent text-indigo-400 font-bold focus:outline-none cursor-pointer text-sm"
+                      >
+                        {NOTES.map(note => (
+                          <option key={note} value={note} className="bg-gray-900">{note}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
 
-                  {/* TOP-RIGHT: Exit Fullscreen */}
-                  <div className={`absolute top-4 right-4 z-20 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
+                  {/* TOP-RIGHT: Pin Controls & Exit Fullscreen */}
+                  <div className={`absolute top-4 right-4 z-20 flex items-center gap-2 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAutoHideEnabled(!autoHideEnabled);
+                        if (!autoHideEnabled && fsTimerRef.current) {
+                          // If turning on auto-hide, start the timer
+                          fsTimerRef.current = setTimeout(() => setShowFsControls(false), 3000);
+                        } else if (fsTimerRef.current) {
+                          // If turning off auto-hide, clear the timer
+                          clearTimeout(fsTimerRef.current);
+                        }
+                      }}
+                      className={`p-2 rounded-lg transition backdrop-blur-md ${!autoHideEnabled ? 'bg-indigo-600/90 text-white' : 'bg-gray-800/80 hover:bg-gray-700 text-gray-400 hover:text-white'}`}
+                      title={!autoHideEnabled ? "Controls Pinned (Always Show)" : "Controls Auto-Hide"}
+                    >
+                      {!autoHideEnabled ? <Pin size={20} /> : <PinOff size={20} />}
+                    </button>
+
                     <button
                       onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
                       className="p-2 bg-gray-800/80 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition backdrop-blur-md"

@@ -65,7 +65,7 @@ const AudioPlayer = forwardRef(({
                     end: currentTime + 5,
                     content: 'Loop',
                     color: 'rgba(99, 102, 241, 0.3)',
-                    drag: true,
+                    drag: false, // Disabled full-region dragging to prevent mobile scroll/seek conflicts
                     resize: true,
                 });
                 onRegionCreated && onRegionCreated(region);
