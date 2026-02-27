@@ -23,60 +23,6 @@ body {
   min-height: 100vh;
 }
 
-/* -----------------------------------------
-   WAVESURFER REGION CUSTOM HANDLES (Mobile Touch Fixes)
------------------------------------------ */
-div.wavesurfer-region {
-  /* Allow region itself to pass touches through to the waveform (for seeking/scrolling) */
-  pointer-events: none !important;
-  border-top: 2px solid rgba(99, 102, 241, 0.8) !important;
-}
-
-/* 1. Create a top-center "Drag Handle" for moving the whole loop */
-div.wavesurfer-region::after {
-  content: '';
-  position: absolute !important;
-  top: 0 !important;
-  left: 50% !important;
-  transform: translateX(-50%) !important;
-  width: 48px !important;
-  height: 28px !important;
-  background-color: rgba(99, 102, 241, 0.95) !important;
-  border-bottom-left-radius: 8px !important;
-  border-bottom-right-radius: 8px !important;
-  pointer-events: auto !important;
-  /* Re-enable touch for this specific drag handle */
-  touch-action: none !important;
-  cursor: grab !important;
-  z-index: 10 !important;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4) !important;
-}
-
-div.wavesurfer-region:active::after {
-  cursor: grabbing !important;
-  background-color: rgba(67, 56, 202, 1) !important;
-}
-
-/* 2. Style the Left/Right Resize Handles */
-div.wavesurfer-handle {
-  width: 28px !important;
-  max-width: 28px !important;
-  height: 40px !important;
-  /* Small box instead of full height */
-  top: 0 !important;
-  /* Align to very top */
-  background-color: #F59E0B !important;
-  /* Amber color to make it obvious */
-  border-radius: 4px !important;
-  pointer-events: auto !important;
-  /* Re-enable touch for handles */
-  touch-action: none !important;
-  /* Forces drag resize instead of native scroll */
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5) !important;
-  opacity: 0.95 !important;
-  z-index: 11 !important;
-}
-
 /* Add inner grip lines to handles for better UI */
 div.wavesurfer-handle::after {
   content: '';

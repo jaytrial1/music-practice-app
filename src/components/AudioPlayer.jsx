@@ -68,6 +68,110 @@ const AudioPlayer = forwardRef(({
                     drag: false, // Disabled full-region dragging to prevent mobile scroll/seek conflicts
                     resize: true,
                 });
+
+                // --- INJECT CUSTOM LOOP HANDLES (Mobile Touch Fix) bypassing Shadow DOM ---
+                setTimeout(() => {
+                    if (region && region.element) {
+                        // 1. Make region body click-through to allow waveform scroll/seek underneath
+                        region.element.style.pointerEvents = 'none';
+                        region.element.style.borderTop = '2px solid rgba(99, 102, 241, 0.8)';
+
+                        // 2. Find internal resize handles (WaveSurfer usually makes them the first/last divs or gives them data attributes)
+                        // In WaveSurfer 7, they are typically children 0 and 1, or have specific styles.
+                        const children = Array.from(region.element.children);
+                        const handles = children.filter(c => c.tagName === 'DIV' && c.style.position === 'absolute');
+
+                        handles.forEach((handle, i) => {
+                            // Apply custom box style to the resize handles
+                            handle.style.cssText += `
+                                width: 28px !important;
+                                max-width: 28px !important;
+                                height: 40px !important;
+                                top: 0 !important;
+                                background-color: #F59E0B !important;
+                                border-radius: 4px !important;
+                                pointer-events: auto !important;
+                                touch-action: none !important;
+                                box-shadow: 0 2px 5px rgba(0,0,0,0.5) !important;
+                                opacity: 0.95 !important;
+                                z-index: 11 !important;
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                            `;
+                            // Add inner grip lines directly
+                            handle.innerHTML = '<div style="width: 4px; height: 16px; border-left: 1px solid rgba(255,255,255,0.8); border-right: 1px solid rgba(255,255,255,0.8);"></div>';
+                        });
+
+                        // 3. Create the Top-Center Drag Handle
+                        const dragHandle = document.createElement('div');
+                        dragHandle.style.cssText = `
+                            position: absolute !important;
+                            top: 0 !important;
+                            left: 50% !important;
+                            transform: translateX(-50%) !important;
+                            width: 48px !important;
+                            height: 28px !important;
+                            background-color: rgba(99, 102, 241, 0.95) !important;
+                            border-bottom-left-radius: 8px !important;
+                            border-bottom-right-radius: 8px !important;
+                            pointer-events: auto !important;
+                            touch-action: none !important;
+                            cursor: grab !important;
+                            z-index: 10 !important;
+                            box-shadow: 0 2px 5px rgba(0,0,0,0.4) !important;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                        `;
+                        // Inner lines for drag handle
+                        dragHandle.innerHTML = '<div style="width: 12px; height: 4px; border-top: 1px solid rgba(255,255,255,0.8); border-bottom: 1px solid rgba(255,255,255,0.8);"></div>';
+
+                        // 4. Implement custom drag logic for the whole region via this top-center handle
+                        let isDragging = false;
+                        let startX = 0;
+                        let initialStart = 0;
+                        let initialEnd = 0;
+
+                        dragHandle.addEventListener('pointerdown', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            isDragging = true;
+                            startX = e.clientX;
+                            initialStart = region.start;
+                            initialEnd = region.end;
+                            dragHandle.style.cursor = 'grabbing';
+                            dragHandle.style.backgroundColor = 'rgba(67, 56, 202, 1)';
+                        });
+
+                        window.addEventListener('pointermove', (e) => {
+                            if (!isDragging || !wavesurferRef.current) return;
+                            const dx = e.clientX - startX;
+                            const wrapper = wavesurferRef.current.getWrapper();
+                            const pxPerSec = wrapper.getBoundingClientRect().width / wavesurferRef.current.getDuration();
+                            const dt = dx / pxPerSec;
+
+                            const newStart = Math.max(0, initialStart + dt);
+                            const newEnd = Math.min(wavesurferRef.current.getDuration(), initialEnd + dt);
+
+                            // Prevent dragging outside bounds
+                            if (newStart >= 0 && newEnd <= wavesurferRef.current.getDuration()) {
+                                region.setOptions({ start: newStart, end: newEnd });
+                            }
+                        });
+
+                        window.addEventListener('pointerup', () => {
+                            if (isDragging) {
+                                isDragging = false;
+                                dragHandle.style.cursor = 'grab';
+                                dragHandle.style.backgroundColor = 'rgba(99, 102, 241, 0.95)';
+                            }
+                        });
+
+                        region.element.appendChild(dragHandle);
+                    }
+                }, 50);
+
                 onRegionCreated && onRegionCreated(region);
             }
         },
