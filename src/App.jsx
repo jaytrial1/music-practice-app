@@ -438,6 +438,25 @@ function App() {
                     </div>
                   </div>
 
+                  {/* TOP-CENTER: Zoom Controls */}
+                  <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-20 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
+                    <div className="flex items-center gap-4 bg-gray-900/90 backdrop-blur-xl px-4 py-2 rounded-xl border border-gray-700/50 shadow-xl">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setZoom(z => Math.max(10, z - 30)); resetFsTimer(); }}
+                        className="p-1 text-gray-400 hover:text-white transition"
+                      >
+                        <ZoomOut size={16} />
+                      </button>
+                      <span className="text-xs text-gray-500 font-bold tracking-wider uppercase">Zoom</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setZoom(z => Math.min(500, z + 30)); resetFsTimer(); }}
+                        className="p-1 text-gray-400 hover:text-white transition"
+                      >
+                        <ZoomIn size={16} />
+                      </button>
+                    </div>
+                  </div>
+
                   {/* TOP-RIGHT: Pin Controls & Exit Fullscreen */}
                   <div className={`absolute top-4 right-4 z-20 flex items-center gap-2 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
                     <button
@@ -469,23 +488,6 @@ function App() {
 
                   {/* BOTTOM-CENTER: Main Controls */}
                   <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-
-                    {/* Zoom / Extra Controls (Top Row) */}
-                    <div className="flex items-center gap-4 bg-gray-900/90 backdrop-blur-xl px-4 py-2 rounded-xl border border-gray-700/50 shadow-xl">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setZoom(z => Math.max(10, z - 30)); resetFsTimer(); }}
-                        className="p-1 text-gray-400 hover:text-white transition"
-                      >
-                        <ZoomOut size={16} />
-                      </button>
-                      <span className="text-xs text-gray-500 font-bold tracking-wider uppercase">Zoom</span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setZoom(z => Math.min(500, z + 30)); resetFsTimer(); }}
-                        className="p-1 text-gray-400 hover:text-white transition"
-                      >
-                        <ZoomIn size={16} />
-                      </button>
-                    </div>
 
                     {/* Main Actions (Bottom Row) */}
                     <div className="flex items-center gap-4 bg-gray-900/90 backdrop-blur-xl px-6 py-3 rounded-2xl border border-gray-700/50 shadow-2xl">
