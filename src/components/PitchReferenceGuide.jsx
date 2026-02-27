@@ -8,24 +8,29 @@ const PitchReferenceGuide = ({ onClose, showSargam, rootKey }) => {
 
     const rootIndex = NOTES.indexOf(rootKey);
 
-    // Replicate the color logic from App.jsx/AudioPlayer.jsx
-    const getColorClass = (interval, octaveStr) => {
+    // Replicate the highly-distinct color logic from App.jsx
+    const getStyleClasses = (interval, octaveStr) => {
         const isAchal = interval === 0 || interval === 7;
         const isVikrut = [1, 3, 6, 8, 10].includes(interval);
 
+        let base = "";
+        let text = "";
+        let subText = "";
+
         if (octaveStr === "Lower") {
-            if (isAchal) return 'bg-blue-900/80 border-blue-500 shadow-blue-500/20';
-            else if (isVikrut) return 'bg-orange-950/90 border-orange-700 shadow-orange-700/20';
-            else return 'bg-emerald-950/90 border-emerald-700 shadow-emerald-700/20';
+            if (isAchal) { base = 'bg-blue-950 border-2 border-blue-800 shadow-[inset_0_0_15px_rgba(29,78,216,0.3)]'; text = 'text-blue-300'; subText = 'text-blue-500'; }
+            else if (isVikrut) { base = 'bg-rose-950 border-2 border-rose-800 shadow-[inset_0_0_15px_rgba(190,18,60,0.3)]'; text = 'text-rose-300'; subText = 'text-rose-500'; }
+            else { base = 'bg-emerald-950 border-2 border-emerald-800 shadow-[inset_0_0_15px_rgba(4,120,87,0.3)]'; text = 'text-emerald-300'; subText = 'text-emerald-500'; }
         } else if (octaveStr === "Higher") {
-            if (isAchal) return 'bg-blue-500/90 border-blue-300 shadow-blue-400/50';
-            else if (isVikrut) return 'bg-orange-500/90 border-orange-300 shadow-orange-400/50';
-            else return 'bg-emerald-500/90 border-emerald-300 shadow-emerald-400/50';
+            if (isAchal) { base = 'bg-blue-200 border-2 border-blue-100 shadow-[0_0_20px_rgba(191,219,254,0.6)]'; text = 'text-blue-900'; subText = 'text-blue-700'; }
+            else if (isVikrut) { base = 'bg-rose-200 border-2 border-rose-100 shadow-[0_0_20px_rgba(254,205,211,0.6)]'; text = 'text-rose-900'; subText = 'text-rose-700'; }
+            else { base = 'bg-emerald-200 border-2 border-emerald-100 shadow-[0_0_20px_rgba(167,243,208,0.6)]'; text = 'text-emerald-900'; subText = 'text-emerald-700'; }
         } else { // Middle
-            if (isAchal) return 'bg-blue-600/90 border-blue-400 shadow-blue-500/40';
-            else if (isVikrut) return 'bg-orange-600/90 border-orange-400 shadow-orange-500/40';
-            else return 'bg-emerald-600/90 border-emerald-400 shadow-emerald-500/40';
+            if (isAchal) { base = 'bg-blue-600 border-2 border-blue-400 shadow-[0_0_15px_rgba(37,99,235,0.6)]'; text = 'text-white'; subText = 'text-blue-200'; }
+            else if (isVikrut) { base = 'bg-rose-500 border-2 border-rose-300 shadow-[0_0_15px_rgba(244,63,94,0.6)]'; text = 'text-white'; subText = 'text-rose-200'; }
+            else { base = 'bg-emerald-500 border-2 border-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.6)]'; text = 'text-white'; subText = 'text-emerald-200'; }
         }
+        return { base, text, subText };
     };
 
     const getNoteDisplay = (interval, octaveStr) => {
@@ -91,15 +96,15 @@ const PitchReferenceGuide = ({ onClose, showSargam, rootKey }) => {
                                 <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-12 gap-2">
                                     {/* 12 intervals from Root */}
                                     {Array.from({ length: 12 }).map((_, i) => {
-                                        const colorClass = getColorClass(i, octave.name);
+                                        const styles = getStyleClasses(i, octave.name);
                                         const display = getNoteDisplay(i, octave.name);
 
                                         return (
-                                            <div key={i} className={`flex flex-col items-center justify-center p-3 rounded-lg border shadow-lg ${colorClass}`}>
-                                                <div className="text-xl font-black text-white drop-shadow-md">
+                                            <div key={i} className={`flex flex-col items-center justify-center p-3 rounded-lg shadow-lg transition-all ${styles.base}`}>
+                                                <div className={`text-xl font-black drop-shadow-md ${styles.text}`}>
                                                     {display.main}
                                                 </div>
-                                                <div className="text-[10px] font-mono text-white/60 mt-0.5">
+                                                <div className={`text-[10px] font-mono mt-0.5 ${styles.subText}`}>
                                                     {display.sub}
                                                 </div>
                                             </div>
@@ -116,11 +121,11 @@ const PitchReferenceGuide = ({ onClose, showSargam, rootKey }) => {
                             <div className="text-sm text-gray-300"><strong className="text-white">Achal Swar</strong> (Sa, Pa)</div>
                         </div>
                         <div className="flex items-center gap-3">
-                            <div className="w-4 h-4 rounded-full bg-emerald-600 border border-emerald-400 shadow-lg shadow-emerald-500/50"></div>
+                            <div className="w-4 h-4 rounded-full bg-emerald-500 border border-emerald-300 shadow-lg shadow-emerald-500/50"></div>
                             <div className="text-sm text-gray-300"><strong className="text-white">Shuddha Swar</strong> (Re, Ga, Ma, Dha, Ni)</div>
                         </div>
                         <div className="flex items-center gap-3">
-                            <div className="w-4 h-4 rounded-full bg-orange-600 border border-orange-400 shadow-lg shadow-orange-500/50"></div>
+                            <div className="w-4 h-4 rounded-full bg-rose-500 border border-rose-300 shadow-lg shadow-rose-500/50"></div>
                             <div className="text-sm text-gray-300"><strong className="text-white">Vikrut/Komal Swar</strong> (re, ga, MA, dha, ni)</div>
                         </div>
                     </div>

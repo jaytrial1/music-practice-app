@@ -745,13 +745,18 @@ const AudioPlayer = forwardRef(({
             const isAchal = interval === 0 || interval === 7;
             const isVikrut = [1, 3, 6, 8, 10].includes(interval);
 
-            // Base hex: [R, G, B]
-            let baseHex = isAchal ? [59, 130, 246] : (isVikrut ? [249, 115, 22] : [16, 185, 129]);
+            // Base hex: Achal (Blue), Vikrut (Rose), Shuddha (Emerald)
+            let baseRgb = isAchal ? [59, 130, 246] : (isVikrut ? [244, 63, 94] : [16, 185, 129]);
 
-            if (octave < 4) baseHex = baseHex.map(c => Math.floor(c * 0.5)); // Darker for lower
-            else if (octave > 4) baseHex = baseHex.map(c => Math.min(255, Math.floor(c * 1.5))); // Brighter for higher
+            if (octave < 4) {
+                // Lower Octave: Much darker
+                baseRgb = baseRgb.map(c => Math.floor(c * 0.4));
+            } else if (octave > 4) {
+                // Higher Octave: Pastel / Bright
+                baseRgb = baseRgb.map(c => Math.min(255, Math.floor(c + (255 - c) * 0.6)));
+            }
 
-            return `rgb(${baseHex[0]}, ${baseHex[1]}, ${baseHex[2]})`;
+            return `rgb(${baseRgb[0]}, ${baseRgb[1]}, ${baseRgb[2]})`;
         };
 
         ctx.lineWidth = 4;

@@ -203,23 +203,31 @@ function App() {
     const isVikrut = [1, 3, 6, 8, 10].includes(interval);
 
     // 3. Determine Color Class based on note type and octave
-    let colorClass = '';
-    if (octave < 4) { // Lower Octave (Mandra)
-      if (isAchal) colorClass = 'bg-blue-900/80 border-blue-500 shadow-blue-500/20';
-      else if (isVikrut) colorClass = 'bg-orange-950/90 border-orange-700 shadow-orange-700/20';
-      else colorClass = 'bg-emerald-950/90 border-emerald-700 shadow-emerald-700/20';
-    } else if (octave > 4) { // Higher Octave (Taar)
-      if (isAchal) colorClass = 'bg-blue-500/90 border-blue-300 shadow-blue-400/50';
-      else if (isVikrut) colorClass = 'bg-orange-500/90 border-orange-300 shadow-orange-400/50';
-      else colorClass = 'bg-emerald-500/90 border-emerald-300 shadow-emerald-400/50';
-    } else { // Middle Octave (Madhya)
-      if (isAchal) colorClass = 'bg-blue-600/90 border-blue-400 shadow-blue-500/40';
-      else if (isVikrut) colorClass = 'bg-orange-600/90 border-orange-400 shadow-orange-500/40';
-      else colorClass = 'bg-emerald-600/90 border-emerald-400 shadow-emerald-500/40';
-    }
+    const getStyleClasses = (isAchal, isVikrut, octave) => {
+      let base = "";
+      let text = "";
+      let subText = "";
+
+      if (octave < 4) { // Lower
+        if (isAchal) { base = 'bg-blue-950 border-2 border-blue-800 shadow-[inset_0_0_15px_rgba(29,78,216,0.3)]'; text = 'text-blue-300'; subText = 'text-blue-500'; }
+        else if (isVikrut) { base = 'bg-rose-950 border-2 border-rose-800 shadow-[inset_0_0_15px_rgba(190,18,60,0.3)]'; text = 'text-rose-300'; subText = 'text-rose-500'; }
+        else { base = 'bg-emerald-950 border-2 border-emerald-800 shadow-[inset_0_0_15px_rgba(4,120,87,0.3)]'; text = 'text-emerald-300'; subText = 'text-emerald-500'; }
+      } else if (octave > 4) { // Higher
+        if (isAchal) { base = 'bg-blue-200 border-2 border-blue-100 shadow-[0_0_20px_rgba(191,219,254,0.6)]'; text = 'text-blue-900'; subText = 'text-blue-700'; }
+        else if (isVikrut) { base = 'bg-rose-200 border-2 border-rose-100 shadow-[0_0_20px_rgba(254,205,211,0.6)]'; text = 'text-rose-900'; subText = 'text-rose-700'; }
+        else { base = 'bg-emerald-200 border-2 border-emerald-100 shadow-[0_0_20px_rgba(167,243,208,0.6)]'; text = 'text-emerald-900'; subText = 'text-emerald-700'; }
+      } else { // Middle
+        if (isAchal) { base = 'bg-blue-600 border-2 border-blue-400 shadow-[0_0_15px_rgba(37,99,235,0.6)]'; text = 'text-white'; subText = 'text-blue-200'; }
+        else if (isVikrut) { base = 'bg-rose-500 border-2 border-rose-300 shadow-[0_0_15px_rgba(244,63,94,0.6)]'; text = 'text-white'; subText = 'text-rose-200'; }
+        else { base = 'bg-emerald-500 border-2 border-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.6)]'; text = 'text-white'; subText = 'text-emerald-200'; }
+      }
+      return { base, text, subText };
+    };
+
+    const colors = getStyleClasses(isAchal, isVikrut, octave);
 
     if (!showSargam) {
-      return { main: note, sub: `${Math.round(frequency)} Hz`, colorClass };
+      return { main: note, sub: `${Math.round(frequency)} Hz`, colors };
     }
 
     // Convert to Sargam
@@ -229,7 +237,7 @@ function App() {
     if (octave < 4) sargamNote += "\u0323"; // Dot Below
     else if (octave > 4) sargamNote += "\u0307"; // Dot Above
 
-    return { main: sargamNote, sub: `${note} / ${Math.round(frequency)} Hz`, colorClass };
+    return { main: sargamNote, sub: `${note} / ${Math.round(frequency)} Hz`, colors };
   };
 
   const display = getDisplayNote(currentNote);
@@ -485,7 +493,7 @@ function App() {
               <div className={`
                         relative flex flex-col items-center justify-center w-full md:w-64 h-32 rounded-2xl border transition-all duration-300
                         ${isLiveMicEnabled
-                  ? (currentNote ? `shadow-2xl scale-105 ${display.colorClass}` : 'bg-indigo-900/40 border-indigo-500/30 shadow-inner')
+                  ? (currentNote ? `shadow-2xl scale-105 ${display.colors.base}` : 'bg-indigo-900/40 border-indigo-500/30 shadow-inner')
                   : 'bg-gray-900/50 border-gray-800 grayscale opacity-80'}
                     `}>
                 <div className="absolute top-3 left-4 flex items-center gap-2">
@@ -510,10 +518,10 @@ function App() {
                   <div className="text-gray-500 text-sm font-medium mt-2">Mic Disabled</div>
                 ) : currentNote ? (
                   <>
-                    <div className="text-5xl font-black text-white tracking-tighter drop-shadow-lg mt-2">
+                    <div className={`text-5xl font-black tracking-tighter drop-shadow-lg mt-2 ${display.colors.text}`}>
                       {display.main}
                     </div>
-                    <div className="text-sm font-mono text-indigo-200 mt-1 opacity-80">
+                    <div className={`text-sm font-mono mt-1 ${display.colors.subText}`}>
                       {display.sub}
                     </div>
                   </>
@@ -649,7 +657,7 @@ function App() {
                     <div className={`
                         relative flex flex-col items-center justify-center w-40 h-24 rounded-2xl border backdrop-blur-md shadow-2xl
                         ${isLiveMicEnabled
-                        ? (currentNote ? display.colorClass : 'bg-indigo-900/40 border-indigo-500/30')
+                        ? (currentNote ? display.colors.base : 'bg-indigo-900/40 border-indigo-500/30')
                         : 'bg-gray-900/50 border-gray-700/50 grayscale opacity-80'
                       }
                     `}>
@@ -675,10 +683,10 @@ function App() {
                         <div className="text-gray-500 text-xs font-medium mt-3 pointer-events-none">Mic Disabled</div>
                       ) : currentNote ? (
                         <>
-                          <div className="text-4xl font-black text-white tracking-tighter drop-shadow-lg mt-2 pointer-events-none">
+                          <div className={`text-4xl font-black tracking-tighter drop-shadow-lg mt-2 pointer-events-none ${display.colors.text}`}>
                             {display.main}
                           </div>
-                          <div className="text-xs font-mono text-indigo-200 mt-0.5 opacity-80 pointer-events-none">
+                          <div className={`text-xs font-mono mt-0.5 pointer-events-none ${display.colors.subText}`}>
                             {display.sub}
                           </div>
                         </>
