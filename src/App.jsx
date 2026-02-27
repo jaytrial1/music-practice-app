@@ -486,6 +486,35 @@ function App() {
                     </button>
                   </div>
 
+                  {/* FULLSCREEN CURRENT NOTE DISPLAY */}
+                  <div className={`absolute left-8 bottom-32 z-20 transition-all duration-300 pointer-events-none ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+                    <div className={`
+                        flex flex-col items-center justify-center w-40 h-24 rounded-2xl border backdrop-blur-md shadow-2xl
+                        ${currentNote
+                        ? 'bg-indigo-900/60 border-indigo-500/50 shadow-indigo-500/20'
+                        : 'bg-gray-900/50 border-gray-700/50 grayscale opacity-80'
+                      }
+                    `}>
+                      <div className="absolute top-2 left-3 text-[10px] font-bold tracking-wider text-white/50 uppercase">Current Note</div>
+
+                      {currentNote ? (
+                        <>
+                          <div className="text-4xl font-black text-white tracking-tighter drop-shadow-lg mt-2">
+                            {display.main}
+                          </div>
+                          <div className="text-xs font-mono text-indigo-200 mt-0.5 opacity-80">
+                            {display.sub}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center text-gray-400 gap-1.5 mt-2">
+                          <Activity size={18} />
+                          <span className="text-xs">Listening...</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   {/* BOTTOM-CENTER: Main Controls */}
                   <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
 
