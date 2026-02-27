@@ -34,10 +34,45 @@ const Controls = ({
     return (
         <div className="bg-gray-800 p-6 rounded-xl shadow-2xl border border-gray-700 w-full max-w-4xl mx-auto mt-6">
 
-            {/* Top Row: Playback Controls */}
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-6">
+            {/* Top Row: Zoom Controls (Centered) */}
+            <div className="flex items-center justify-center gap-4 mb-6">
+                <ZoomOut size={20} className="text-gray-400" />
+                <input
+                    type="range"
+                    min="10"
+                    max="500"
+                    value={zoom}
+                    onChange={(e) => onZoomChange(Number(e.target.value))}
+                    className="w-full max-w-md h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                />
+                <ZoomIn size={20} className="text-gray-400" />
+            </div>
 
-                {/* Play/Pause & Skip */}
+            <div className="h-px bg-gray-700 my-4 w-full" />
+
+            {/* Middle Row: Speed & Playback Controls */}
+            <div className="flex flex-col md:flex-row items-center justify-center gap-8 mb-6">
+
+                {/* Speed Control (Moved to left) */}
+                <div className="flex items-center gap-3 bg-gray-900/50 p-3 rounded-xl border border-gray-700/50">
+                    <span className="text-gray-400 text-sm font-medium uppercase tracking-wider">Speed</span>
+                    <div className="flex gap-1.5 flex-wrap justify-center">
+                        {speeds.map((rate) => (
+                            <button
+                                key={rate}
+                                onClick={() => onPlaybackRateChange(rate)}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${playbackRate === rate
+                                    ? 'bg-indigo-600 text-white shadow-md transform scale-105'
+                                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                    }`}
+                            >
+                                {rate}x
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Play/Pause & Skip (Moved to right) */}
                 <div className="flex items-center gap-4">
                     <button
                         onClick={onSkipBackward}
@@ -67,10 +102,10 @@ const Controls = ({
                     {userAudioUrl && (
                         <button
                             onClick={onPlayRecording}
-                            className="p-3 bg-orange-600 hover:bg-orange-700 rounded-full transition text-white shadow-lg animate-in zoom-in"
+                            className="p-4 bg-orange-600 hover:bg-orange-700 rounded-full transition text-white shadow-lg animate-in zoom-in"
                             title="Play My Recording"
                         >
-                            <PlayCircle size={24} />
+                            <PlayCircle size={28} />
                         </button>
                     )}
 
@@ -83,67 +118,31 @@ const Controls = ({
                     </button>
                 </div>
 
-                {/* Speed Control */}
-                <div className="flex items-center gap-3 bg-gray-900/50 p-2 rounded-lg">
-                    <span className="text-gray-400 text-sm font-medium uppercase tracking-wider">Speed</span>
-                    <div className="flex gap-1">
-                        {speeds.map((rate) => (
-                            <button
-                                key={rate}
-                                onClick={() => onPlaybackRateChange(rate)}
-                                className={`px-3 py-1 rounded text-sm font-bold transition-all ${playbackRate === rate
-                                    ? 'bg-indigo-600 text-white shadow-md transform scale-105'
-                                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                                    }`}
-                            >
-                                {rate}x
-                            </button>
-                        ))}
-                    </div>
-                </div>
             </div>
 
             <div className="h-px bg-gray-700 my-4 w-full" />
 
-            {/* Bottom Row: Advanced Tools (Looping & Zoom) */}
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            {/* Bottom Row: Looping */}
+            <div className="flex items-center justify-center gap-4">
+                <button
+                    onClick={onAddRegion}
+                    className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-white font-medium transition shadow-lg"
+                    title="Loop current section (5s)"
+                >
+                    <Flag size={20} />
+                    <span>Set Loop Region</span>
+                </button>
 
-                {/* Looping Controls */}
-                <div className="flex items-center gap-4">
-                    <button
-                        onClick={onAddRegion}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white font-medium transition shadow-lg"
-                        title="Loop current section (5s)"
-                    >
-                        <Flag size={18} />
-                        <span>Set Loop</span>
-                    </button>
-
-                    <button
-                        onClick={onClearRegions}
-                        className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-red-900/50 hover:text-red-200 rounded-lg text-gray-300 transition"
-                        title="Clear all loops"
-                    >
-                        <Trash2 size={18} />
-                        <span>Clear</span>
-                    </button>
-                </div>
-
-                {/* Zoom Controls */}
-                <div className="flex items-center gap-3 w-full md:w-auto">
-                    <ZoomOut size={18} className="text-gray-400" />
-                    <input
-                        type="range"
-                        min="10"
-                        max="500"
-                        value={zoom}
-                        onChange={(e) => onZoomChange(Number(e.target.value))}
-                        className="w-full md:w-32 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                    />
-                    <ZoomIn size={18} className="text-gray-400" />
-                </div>
-
+                <button
+                    onClick={onClearRegions}
+                    className="flex items-center gap-2 px-6 py-3 bg-gray-700 hover:bg-red-900/50 hover:text-red-200 rounded-xl text-gray-300 transition"
+                    title="Clear all loops"
+                >
+                    <Trash2 size={20} />
+                    <span>Clear Loops</span>
+                </button>
             </div>
+
         </div>
     );
 };

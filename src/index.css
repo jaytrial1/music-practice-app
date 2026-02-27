@@ -23,21 +23,80 @@ body {
   min-height: 100vh;
 }
 
-/* Make WaveSurfer Region Handles easier to grab on mobile */
-.wavesurfer-handle {
-  width: 20px !important;
-  max-width: 20px !important;
-  background-color: rgba(255, 255, 255, 0.5) !important;
-  touch-action: none !important;
-  /* Forces drag resize instead of native scroll */
+/* -----------------------------------------
+   WAVESURFER REGION CUSTOM HANDLES (Mobile Touch Fixes)
+----------------------------------------- */
+.wavesurfer-region {
+  /* Allow region itself to pass touches through to the waveform (for seeking/scrolling) */
+  pointer-events: none !important;
+  border-top: 2px solid rgba(99, 102, 241, 0.8) !important;
 }
 
-/* Expand the clickable area outside the visual handle */
+/* 1. Create a top-center "Drag Handle" for moving the whole loop */
+.wavesurfer-region::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 24px;
+  background-color: rgba(99, 102, 241, 0.9);
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  pointer-events: auto !important;
+  /* Re-enable touch for this specific drag handle */
+  touch-action: none !important;
+  cursor: grab;
+  z-index: 10;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.wavesurfer-region:active::after {
+  cursor: grabbing;
+  background-color: rgba(79, 70, 229, 1);
+}
+
+/* 2. Style the Left/Right Resize Handles */
+.wavesurfer-handle {
+  width: 24px !important;
+  max-width: 24px !important;
+  height: 36px !important;
+  /* Small box instead of full height */
+  top: 0 !important;
+  /* Align to very top */
+  background-color: #F59E0B !important;
+  /* Amber color to make it obvious */
+  border-radius: 4px !important;
+  pointer-events: auto !important;
+  /* Re-enable touch for handles */
+  touch-action: none !important;
+  /* Forces drag resize instead of native scroll */
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5) !important;
+  opacity: 0.9 !important;
+  z-index: 11 !important;
+}
+
+/* Add inner grip lines to handles for better UI */
+.wavesurfer-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 4px;
+  height: 14px;
+  border-left: 1px solid rgba(255, 255, 255, 0.7);
+  border-right: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+/* Expand the invisible clickable area around the handles so they are easy to grab on mobile */
 .wavesurfer-handle::before {
   content: '';
   position: absolute;
-  left: -10px;
-  right: -10px;
-  top: 0;
-  bottom: 0;
+  left: -15px;
+  right: -15px;
+  top: -10px;
+  bottom: -20px;
+  background: transparent;
 }
