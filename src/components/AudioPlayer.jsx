@@ -357,7 +357,7 @@ const AudioPlayer = forwardRef(({
                 mediaControls: false,
                 autoplay: false,
                 interact: true,
-                dragToSeek: true,
+                dragToSeek: false, // Disabled so swiping the waveform scrolls the screen instead of dragging the playhead
                 hideScrollbar: false,
             });
 
