@@ -266,7 +266,8 @@ const AudioPlayer = forwardRef(({
                 activeStreamRef.current.getTracks().forEach(track => track.stop());
                 activeStreamRef.current = null;
             }
-        }
+        },
+        getStableNotes: () => stableNotes
     }));
 
     // Helper: Convert frequency to Note

@@ -3,7 +3,7 @@ import AudioPlayer from './components/AudioPlayer';
 import Controls from './components/Controls';
 import TestRecorder from './components/TestRecorder';
 import PitchReferenceGuide from './components/PitchReferenceGuide';
-import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff, Info } from 'lucide-react';
+import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff, Info, Download } from 'lucide-react';
 import { YIN } from 'pitchfinder';
 
 // Sargam Mapping Helpers
@@ -241,6 +241,31 @@ function App() {
   };
 
   const display = getDisplayNote(currentNote);
+
+  // Download Notations Feature
+  const handleDownloadNotations = () => {
+    if (!playerRef.current) return;
+    const stableNotes = playerRef.current.getStableNotes();
+    if (!stableNotes || stableNotes.length === 0) {
+      alert("No notations available to download. Please play the song to allow it to process the pitch.");
+      return;
+    }
+
+    let csvContent = "Start Time (s),End Time (s),Duration (s),Note,Frequency (Hz)\n";
+    stableNotes.forEach(note => {
+      const duration = note.endTime - note.startTime;
+      csvContent += `${note.startTime.toFixed(2)},${note.endTime.toFixed(2)},${duration.toFixed(2)},${note.label},${note.avgFreq.toFixed(1)}\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `notations_${fileName ? fileName.replace(/\.[^/.]+$/, "") : 'track'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Live Mic Pitch Detection
   useEffect(() => {
@@ -484,6 +509,16 @@ function App() {
                 >
                   <Activity size={16} />
                   <span>{notationMode === 'axis' ? 'Axis Mode' : 'Floating Mode'}</span>
+                </button>
+
+                {/* Download Notations Button */}
+                <button
+                  onClick={handleDownloadNotations}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition bg-emerald-600/90 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20"
+                  title="Download Notations (CSV)"
+                >
+                  <Download size={16} />
+                  <span className="hidden sm:inline">Export Notes</span>
                 </button>
               </div>
             </div>
