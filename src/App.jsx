@@ -44,6 +44,10 @@ function App() {
   const handleFsClick = useCallback((e) => {
     // Don't toggle if clicking a button or control
     if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select')) return;
+
+    // If controls are pinned (auto-hide disabled), don't hide them when tapping the background
+    if (!autoHideEnabled) return;
+
     if (showFsControls) {
       // Currently visible → hide immediately
       if (fsTimerRef.current) clearTimeout(fsTimerRef.current);
@@ -52,7 +56,7 @@ function App() {
       // Currently hidden → show + start auto-hide timer
       resetFsTimer();
     }
-  }, [showFsControls, resetFsTimer]);
+  }, [showFsControls, resetFsTimer, autoHideEnabled]);
 
   // Fullscreen toggle
   const toggleFullscreen = () => {

@@ -418,10 +418,6 @@ const AudioPlayer = forwardRef(({
             });
 
             wsRegions.on('region-out', (region) => region.play());
-            wsRegions.on('region-clicked', (region, e) => {
-                e.stopPropagation();
-                region.play();
-            });
 
             if (typeof audioFile === 'string') {
                 ws.load(audioFile);
