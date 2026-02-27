@@ -26,42 +26,42 @@ body {
 /* -----------------------------------------
    WAVESURFER REGION CUSTOM HANDLES (Mobile Touch Fixes)
 ----------------------------------------- */
-.wavesurfer-region {
+div.wavesurfer-region {
   /* Allow region itself to pass touches through to the waveform (for seeking/scrolling) */
   pointer-events: none !important;
   border-top: 2px solid rgba(99, 102, 241, 0.8) !important;
 }
 
 /* 1. Create a top-center "Drag Handle" for moving the whole loop */
-.wavesurfer-region::after {
+div.wavesurfer-region::after {
   content: '';
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 40px;
-  height: 24px;
-  background-color: rgba(99, 102, 241, 0.9);
-  border-bottom-left-radius: 8px;
-  border-bottom-right-radius: 8px;
+  position: absolute !important;
+  top: 0 !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: 48px !important;
+  height: 28px !important;
+  background-color: rgba(99, 102, 241, 0.95) !important;
+  border-bottom-left-radius: 8px !important;
+  border-bottom-right-radius: 8px !important;
   pointer-events: auto !important;
   /* Re-enable touch for this specific drag handle */
   touch-action: none !important;
-  cursor: grab;
-  z-index: 10;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  cursor: grab !important;
+  z-index: 10 !important;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4) !important;
 }
 
-.wavesurfer-region:active::after {
-  cursor: grabbing;
-  background-color: rgba(79, 70, 229, 1);
+div.wavesurfer-region:active::after {
+  cursor: grabbing !important;
+  background-color: rgba(67, 56, 202, 1) !important;
 }
 
 /* 2. Style the Left/Right Resize Handles */
-.wavesurfer-handle {
-  width: 24px !important;
-  max-width: 24px !important;
-  height: 36px !important;
+div.wavesurfer-handle {
+  width: 28px !important;
+  max-width: 28px !important;
+  height: 40px !important;
   /* Small box instead of full height */
   top: 0 !important;
   /* Align to very top */
@@ -73,30 +73,30 @@ body {
   touch-action: none !important;
   /* Forces drag resize instead of native scroll */
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5) !important;
-  opacity: 0.9 !important;
+  opacity: 0.95 !important;
   z-index: 11 !important;
 }
 
 /* Add inner grip lines to handles for better UI */
-.wavesurfer-handle::after {
+div.wavesurfer-handle::after {
   content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 4px;
-  height: 14px;
-  border-left: 1px solid rgba(255, 255, 255, 0.7);
-  border-right: 1px solid rgba(255, 255, 255, 0.7);
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: 4px !important;
+  height: 16px !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.8) !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.8) !important;
 }
 
 /* Expand the invisible clickable area around the handles so they are easy to grab on mobile */
-.wavesurfer-handle::before {
+div.wavesurfer-handle::before {
   content: '';
-  position: absolute;
-  left: -15px;
-  right: -15px;
-  top: -10px;
-  bottom: -20px;
-  background: transparent;
+  position: absolute !important;
+  left: -20px !important;
+  right: -20px !important;
+  top: -10px !important;
+  bottom: -25px !important;
+  background: transparent !important;
 }
