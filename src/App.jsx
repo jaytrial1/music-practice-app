@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import AudioPlayer from './components/AudioPlayer';
 import Controls from './components/Controls';
 import TestRecorder from './components/TestRecorder';
-import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff } from 'lucide-react';
+import PitchReferenceGuide from './components/PitchReferenceGuide';
+import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff, Info } from 'lucide-react';
 import { YIN } from 'pitchfinder';
 
 // Sargam Mapping Helpers
@@ -25,6 +26,7 @@ function App() {
   const [rootKey, setRootKey] = useState("C"); // Default Sa = C
   const [currentNote, setCurrentNote] = useState(null);
   const [isLiveMicEnabled, setIsLiveMicEnabled] = useState(false);
+  const [showPitchGuide, setShowPitchGuide] = useState(false);
 
   const playerRef = useRef(null);
   const visualizerContainerRef = useRef(null);
@@ -486,7 +488,15 @@ function App() {
                   ? (currentNote ? `shadow-2xl scale-105 ${display.colorClass}` : 'bg-indigo-900/40 border-indigo-500/30 shadow-inner')
                   : 'bg-gray-900/50 border-gray-800 grayscale opacity-80'}
                     `}>
-                <div className="absolute top-3 left-4 text-xs font-bold tracking-wider text-white/50 uppercase">Live Pitch</div>
+                <div className="absolute top-3 left-4 flex items-center gap-2">
+                  <span className="text-xs font-bold tracking-wider text-white/50 uppercase">Live Pitch</span>
+                  <button
+                    onClick={() => setShowPitchGuide(true)}
+                    className="text-indigo-400/50 hover:text-indigo-300 transition-colors"
+                  >
+                    <Info size={14} />
+                  </button>
+                </div>
 
                 <button
                   onClick={() => setIsLiveMicEnabled(!isLiveMicEnabled)}
@@ -643,8 +653,14 @@ function App() {
                         : 'bg-gray-900/50 border-gray-700/50 grayscale opacity-80'
                       }
                     `}>
-                      <div className="absolute top-2 left-3 text-[10px] items-center flex gap-1 font-bold tracking-wider text-white/50 uppercase">
-                        Live Pitch
+                      <div className="absolute top-2 left-3 text-[10px] items-center flex gap-1 font-bold tracking-wider text-white/50 uppercase pointer-events-auto">
+                        <span>Live Pitch</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setShowPitchGuide(true); }}
+                          className="text-indigo-400/50 hover:text-indigo-300 transition-colors"
+                        >
+                          <Info size={12} />
+                        </button>
                       </div>
 
                       <button
@@ -798,6 +814,13 @@ function App() {
             Space: Play/Pause | Arrows: Seek | L: Loop | C: Clear
           </p>
         </div>
+      )}
+      {showPitchGuide && (
+        <PitchReferenceGuide
+          onClose={() => setShowPitchGuide(false)}
+          showSargam={showSargam}
+          rootKey={rootKey}
+        />
       )}
     </div>
   );
