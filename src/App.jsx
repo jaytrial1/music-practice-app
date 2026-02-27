@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import AudioPlayer from './components/AudioPlayer';
 import Controls from './components/Controls';
 import TestRecorder from './components/TestRecorder';
-import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff } from 'lucide-react';
+import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff } from 'lucide-react';
+import { YIN } from 'pitchfinder';
 
 // Sargam Mapping Helpers
 const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -23,6 +24,7 @@ function App() {
   const [notationMode, setNotationMode] = useState('axis'); // 'axis' or 'floating'
   const [rootKey, setRootKey] = useState("C"); // Default Sa = C
   const [currentNote, setCurrentNote] = useState(null);
+  const [isLiveMicEnabled, setIsLiveMicEnabled] = useState(false);
 
   const playerRef = useRef(null);
   const visualizerContainerRef = useRef(null);
@@ -185,6 +187,98 @@ function App() {
 
   const display = getDisplayNote(currentNote);
 
+  // Live Mic Pitch Detection
+  useEffect(() => {
+    let audioCtx;
+    let stream;
+    let scriptNode;
+    let isActive = true;
+
+    const startMic = async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          }
+        });
+
+        if (!isActive) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioCtx.createMediaStreamSource(stream);
+
+        // We use ScriptProcessorNode for wide compatibility and easy chunk access
+        scriptNode = audioCtx.createScriptProcessor(2048, 1, 1);
+        const detectPitch = YIN({
+          sampleRate: audioCtx.sampleRate,
+          threshold: 0.15,
+          probabilityThreshold: 0.05
+        });
+
+        source.connect(scriptNode);
+        scriptNode.connect(audioCtx.destination); // Required for script node to fire
+
+        scriptNode.onaudioprocess = (e) => {
+          if (!isActive) return;
+          const inputBuffer = e.inputBuffer.getChannelData(0);
+
+          // Noise Gate (ignore silent moments)
+          let rms = 0;
+          for (let i = 0; i < inputBuffer.length; i++) {
+            rms += inputBuffer[i] * inputBuffer[i];
+          }
+          rms = Math.sqrt(rms / inputBuffer.length);
+
+          if (rms > 0.01) { // Only detect if loud enough
+            const frequency = detectPitch(inputBuffer);
+            if (frequency && frequency > 50 && frequency < 1200) {
+              // Convert frequency to note
+              const pitch = Math.round(69 + 12 * Math.log2(frequency / 440));
+              const octave = Math.floor(pitch / 12) - 1;
+              const noteIndex = pitch % 12;
+              const note = NOTES[noteIndex] + octave;
+
+              setCurrentNote({ frequency, note });
+            } else {
+              setCurrentNote(null);
+            }
+          } else {
+            setCurrentNote(null);
+          }
+        };
+
+      } catch (err) {
+        console.error("Failed to start live mic for Current Note:", err);
+        setIsLiveMicEnabled(false);
+      }
+    };
+
+    if (isLiveMicEnabled) {
+      startMic();
+    } else {
+      setCurrentNote(null);
+    }
+
+    return () => {
+      isActive = false;
+      if (scriptNode) {
+        scriptNode.disconnect();
+        scriptNode.onaudioprocess = null;
+      }
+      if (audioCtx && audioCtx.state !== 'closed') {
+        audioCtx.close();
+      }
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+      }
+    };
+  }, [isLiveMicEnabled]);
+
   // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -343,15 +437,25 @@ function App() {
             <div className="flex justify-center">
               <div className={`
                         relative flex flex-col items-center justify-center w-full md:w-64 h-32 rounded-2xl border transition-all duration-300
-                        ${currentNote
-                  ? 'bg-gradient-to-br from-indigo-600 to-purple-800 border-indigo-400/50 shadow-2xl shadow-indigo-500/20 scale-105'
+                        ${isLiveMicEnabled
+                  ? (currentNote ? 'bg-gradient-to-br from-indigo-600 to-purple-800 border-indigo-400/50 shadow-2xl shadow-indigo-500/20 scale-105' : 'bg-indigo-900/40 border-indigo-500/30 shadow-inner')
                   : 'bg-gray-900/50 border-gray-800 grayscale opacity-80'}
                     `}>
-                <div className="absolute top-3 left-4 text-xs font-bold tracking-wider text-white/50 uppercase">Current Note</div>
+                <div className="absolute top-3 left-4 text-xs font-bold tracking-wider text-white/50 uppercase">Live Pitch</div>
 
-                {currentNote ? (
+                <button
+                  onClick={() => setIsLiveMicEnabled(!isLiveMicEnabled)}
+                  className={`absolute top-2 right-2 p-1.5 rounded-lg transition-colors border ${isLiveMicEnabled ? 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30' : 'bg-gray-800 border-gray-700 text-gray-500 hover:text-white hover:bg-gray-700'}`}
+                  title={isLiveMicEnabled ? "Disable Live Pitch" : "Enable Live Pitch"}
+                >
+                  {isLiveMicEnabled ? <Mic size={14} /> : <MicOff size={14} />}
+                </button>
+
+                {!isLiveMicEnabled ? (
+                  <div className="text-gray-500 text-sm font-medium mt-2">Mic Disabled</div>
+                ) : currentNote ? (
                   <>
-                    <div className="text-5xl font-black text-white tracking-tighter drop-shadow-lg">
+                    <div className="text-5xl font-black text-white tracking-tighter drop-shadow-lg mt-2">
                       {display.main}
                     </div>
                     <div className="text-sm font-mono text-indigo-200 mt-1 opacity-80">
@@ -359,8 +463,8 @@ function App() {
                     </div>
                   </>
                 ) : (
-                  <div className="flex flex-col items-center text-gray-600 gap-2">
-                    <Activity size={24} />
+                  <div className="flex flex-col items-center text-indigo-400 gap-2 mt-4">
+                    <Activity size={24} className="animate-pulse" />
                     <span className="text-sm">Listening...</span>
                   </div>
                 )}
@@ -397,8 +501,10 @@ function App() {
                   rootKey={rootKey}
                   notationMode={notationMode}
                   isFullscreen={isFullscreen}
+                  onReady={(duration) => {
+                    setDecodingDuration(duration);
+                  }}
                   onFinish={() => setIsPlaying(false)}
-                  onPitchUpdate={setCurrentNote}
                   onRecordingComplete={handleRecordingComplete}
                 />
               </div>
@@ -487,28 +593,40 @@ function App() {
                   </div>
 
                   {/* FULLSCREEN CURRENT NOTE DISPLAY */}
-                  <div className={`absolute left-8 bottom-32 z-20 transition-all duration-300 pointer-events-none ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+                  <div className={`absolute left-8 bottom-32 z-20 transition-all duration-300 ${!isLiveMicEnabled ? 'pointer-events-auto' : 'pointer-events-none'} ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                     <div className={`
-                        flex flex-col items-center justify-center w-40 h-24 rounded-2xl border backdrop-blur-md shadow-2xl
-                        ${currentNote
-                        ? 'bg-indigo-900/60 border-indigo-500/50 shadow-indigo-500/20'
+                        relative flex flex-col items-center justify-center w-40 h-24 rounded-2xl border backdrop-blur-md shadow-2xl
+                        ${isLiveMicEnabled
+                        ? (currentNote ? 'bg-indigo-900/60 border-indigo-500/50 shadow-indigo-500/20' : 'bg-indigo-900/40 border-indigo-500/30')
                         : 'bg-gray-900/50 border-gray-700/50 grayscale opacity-80'
                       }
                     `}>
-                      <div className="absolute top-2 left-3 text-[10px] font-bold tracking-wider text-white/50 uppercase">Current Note</div>
+                      <div className="absolute top-2 left-3 text-[10px] items-center flex gap-1 font-bold tracking-wider text-white/50 uppercase">
+                        Live Pitch
+                      </div>
 
-                      {currentNote ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setIsLiveMicEnabled(!isLiveMicEnabled); }}
+                        className={`absolute top-2 right-2 p-1 rounded-lg transition-colors border pointer-events-auto ${isLiveMicEnabled ? 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30' : 'bg-gray-800 border-gray-700 text-gray-500 hover:text-white hover:bg-gray-700'}`}
+                        title={isLiveMicEnabled ? "Disable Live Pitch" : "Enable Live Pitch"}
+                      >
+                        {isLiveMicEnabled ? <Mic size={12} /> : <MicOff size={12} />}
+                      </button>
+
+                      {!isLiveMicEnabled ? (
+                        <div className="text-gray-500 text-xs font-medium mt-3 pointer-events-none">Mic Disabled</div>
+                      ) : currentNote ? (
                         <>
-                          <div className="text-4xl font-black text-white tracking-tighter drop-shadow-lg mt-2">
+                          <div className="text-4xl font-black text-white tracking-tighter drop-shadow-lg mt-2 pointer-events-none">
                             {display.main}
                           </div>
-                          <div className="text-xs font-mono text-indigo-200 mt-0.5 opacity-80">
+                          <div className="text-xs font-mono text-indigo-200 mt-0.5 opacity-80 pointer-events-none">
                             {display.sub}
                           </div>
                         </>
                       ) : (
-                        <div className="flex flex-col items-center text-gray-400 gap-1.5 mt-2">
-                          <Activity size={18} />
+                        <div className="flex flex-col items-center text-indigo-400 gap-1.5 mt-3 pointer-events-none">
+                          <Activity size={18} className="animate-pulse" />
                           <span className="text-xs">Listening...</span>
                         </div>
                       )}
