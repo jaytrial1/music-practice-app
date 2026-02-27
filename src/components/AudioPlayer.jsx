@@ -699,6 +699,8 @@ const AudioPlayer = forwardRef(({
 
         // --- 1. DRAW FREQUENCY BANDS (Static Background) ---
         // Only draw bands. No text. No active highlighting (backgrounds are static).
+        const rootIndex = rootKey ? NOTES.indexOf(rootKey) : -1;
+
         for (let midi = 36; midi <= 84; midi++) {
             const freqCenter = 440 * Math.pow(2, (midi - 69) / 12);
             const freqTop = freqCenter * Math.pow(2, 1 / 24);
@@ -712,45 +714,50 @@ const AudioPlayer = forwardRef(({
             ctx.fillStyle = midi % 2 === 0 ? "rgba(255, 255, 255, 0.03)" : "rgba(255, 255, 255, 0.01)";
             ctx.fillRect(0, yTop, width, bandHeight);
 
-            // We removed the active logic from here to safe performance
+            // DRAW Sa ROOT LINE
+            if (rootIndex !== -1 && midi % 12 === rootIndex) {
+                // Subtle blue background for Sa band
+                ctx.fillStyle = "rgba(59, 130, 246, 0.1)";
+                ctx.fillRect(0, yTop, width, bandHeight);
+
+                // Solid line exactly at the frequency center of Sa
+                const yCenter = getFreqY(freqCenter, height);
+                ctx.beginPath();
+                ctx.moveTo(0, yCenter);
+                ctx.lineTo(width, yCenter);
+                ctx.strokeStyle = "rgba(59, 130, 246, 0.5)"; // Blue
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
         }
 
-        // --- 2. DRAW PITCH LINE ---
+        // --- 2. DRAW PITCH LINE (Color-coded) ---
         const duration = ws.getDuration();
         if (!duration) return;
         const pxPerSec = width / duration;
 
-        // Glowing Green Curve
-        ctx.lineWidth = 5;
+        const getColorForFreq = (freq) => {
+            const midi = Math.round(69 + 12 * Math.log2(freq / 440));
+            const octave = Math.floor(midi / 12) - 1;
+            const rIndex = rootKey ? NOTES.indexOf(rootKey) : 0;
+            const interval = (midi % 12 - rIndex + 12) % 12;
+
+            const isAchal = interval === 0 || interval === 7;
+            const isVikrut = [1, 3, 6, 8, 10].includes(interval);
+
+            // Base hex: [R, G, B]
+            let baseHex = isAchal ? [59, 130, 246] : (isVikrut ? [249, 115, 22] : [16, 185, 129]);
+
+            if (octave < 4) baseHex = baseHex.map(c => Math.floor(c * 0.5)); // Darker for lower
+            else if (octave > 4) baseHex = baseHex.map(c => Math.min(255, Math.floor(c * 1.5))); // Brighter for higher
+
+            return `rgb(${baseHex[0]}, ${baseHex[1]}, ${baseHex[2]})`;
+        };
+
+        ctx.lineWidth = 4;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        ctx.strokeStyle = '#34D399';
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = '#34D399';
-
-        const drawSmoothCurve = (ctx, points, tension = 0.5) => {
-            if (points.length < 2) return;
-            ctx.beginPath();
-            ctx.moveTo(points[0].x, points[0].y);
-            if (points.length === 2) {
-                ctx.lineTo(points[1].x, points[1].y);
-                ctx.stroke();
-                return;
-            }
-            for (let i = 0; i < points.length - 1; i++) {
-                const p0 = i > 0 ? points[i - 1] : points[0];
-                const p1 = points[i];
-                const p2 = points[i + 1];
-                const p3 = i !== points.length - 2 ? points[i + 2] : p2;
-
-                const cp1x = p1.x + (p2.x - p0.x) / 6 * tension;
-                const cp1y = p1.y + (p2.y - p0.y) / 6 * tension;
-                const cp2x = p2.x - (p3.x - p1.x) / 6 * tension;
-                const cp2y = p2.y - (p3.y - p1.y) / 6 * tension;
-                ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
-            }
-            ctx.stroke();
-        };
+        ctx.shadowBlur = 6;
 
         let currentPath = [];
         let allPaths = [];
@@ -760,23 +767,35 @@ const AudioPlayer = forwardRef(({
             const seg = pitchSegments[i];
             const x = seg.startTime * pxPerSec;
             const y = getFreqY(seg.freq, height);
+            const color = getColorForFreq(seg.freq);
 
             if (currentPath.length > 0 && (seg.startTime - lastEndTime) < 3.0) {
-                currentPath.push({ x, y });
+                currentPath.push({ x, y, color });
             } else {
                 if (currentPath.length > 0) allPaths.push(currentPath);
-                currentPath = [{ x, y }];
+                currentPath = [{ x, y, color }];
             }
             lastEndTime = seg.endTime;
         }
         if (currentPath.length > 0) allPaths.push(currentPath);
 
+        // Draw segments with dynamic colors instead of a single curve
         allPaths.forEach(path => {
-            drawSmoothCurve(ctx, path, 1.0);
-        });
+            if (path.length < 2) return;
+            for (let i = 0; i < path.length - 1; i++) {
+                const p1 = path[i];
+                const p2 = path[i + 1];
 
-        allPaths.forEach(path => {
-            drawSmoothCurve(ctx, path, 1.0);
+                // Add a small threshold constraint: if delta Y is extremely large unexpectedly, skip drawing the connector
+                if (Math.abs(p2.y - p1.y) > height / 3) continue;
+
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.strokeStyle = p1.color;
+                ctx.shadowColor = p1.color;
+                ctx.stroke();
+            }
         });
 
         // --- 3. DRAW USER PITCH (Recorded - Orange) ---

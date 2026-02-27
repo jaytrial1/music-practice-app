@@ -184,31 +184,50 @@ function App() {
 
   // Determine Display Note (Western vs Sargam)
   const getDisplayNote = (noteObj) => {
-    if (!noteObj) return { main: "--", sub: "Listening..." };
+    if (!noteObj) return { main: "--", sub: "Listening...", colorClass: 'bg-gray-900/50 border-gray-800 grayscale opacity-80' };
 
     const { note, frequency } = noteObj; // note is like "C4", "F#3"
 
-    if (!showSargam) {
-      return { main: note, sub: `${Math.round(frequency)} Hz` };
-    }
-
-    // Convert to Sargam
-    // 1. Extract note name (C, C#) and octave
+    // 1. Extract note name and octave
     const noteName = note.replace(/[0-9]/, ""); // "C#4" -> "C#"
+    const octave = parseInt(note.replace(/[^0-9]/g, "")) || 4;
 
     // 2. Find index relative to Root Key
     const rootIndex = NOTES.indexOf(rootKey);
     const noteIndex = NOTES.indexOf(noteName);
+    const interval = (rootIndex === -1 || noteIndex === -1) ? 0 : (noteIndex - rootIndex + 12) % 12;
 
-    if (rootIndex === -1 || noteIndex === -1) return { main: note, sub: "Unknown" };
+    const isAchal = interval === 0 || interval === 7;
+    const isVikrut = [1, 3, 6, 8, 10].includes(interval);
 
-    // 3. Calculate interval (0-11)
-    let interval = (noteIndex - rootIndex + 12) % 12;
+    // 3. Determine Color Class based on note type and octave
+    let colorClass = '';
+    if (octave < 4) { // Lower Octave (Mandra)
+      if (isAchal) colorClass = 'bg-blue-900/80 border-blue-500 shadow-blue-500/20';
+      else if (isVikrut) colorClass = 'bg-orange-950/90 border-orange-700 shadow-orange-700/20';
+      else colorClass = 'bg-emerald-950/90 border-emerald-700 shadow-emerald-700/20';
+    } else if (octave > 4) { // Higher Octave (Taar)
+      if (isAchal) colorClass = 'bg-blue-500/90 border-blue-300 shadow-blue-400/50';
+      else if (isVikrut) colorClass = 'bg-orange-500/90 border-orange-300 shadow-orange-400/50';
+      else colorClass = 'bg-emerald-500/90 border-emerald-300 shadow-emerald-400/50';
+    } else { // Middle Octave (Madhya)
+      if (isAchal) colorClass = 'bg-blue-600/90 border-blue-400 shadow-blue-500/40';
+      else if (isVikrut) colorClass = 'bg-orange-600/90 border-orange-400 shadow-orange-500/40';
+      else colorClass = 'bg-emerald-600/90 border-emerald-400 shadow-emerald-500/40';
+    }
 
-    // 4. Map to Sargam
-    const sargamNote = SARGAM_MAPPING[interval];
+    if (!showSargam) {
+      return { main: note, sub: `${Math.round(frequency)} Hz`, colorClass };
+    }
 
-    return { main: sargamNote, sub: `${note} / ${Math.round(frequency)} Hz` };
+    // Convert to Sargam
+    let sargamNote = (rootIndex === -1 || noteIndex === -1) ? note : SARGAM_MAPPING[interval];
+
+    // Add Octave Dots for Classical Notation
+    if (octave < 4) sargamNote += "\u0323"; // Dot Below
+    else if (octave > 4) sargamNote += "\u0307"; // Dot Above
+
+    return { main: sargamNote, sub: `${note} / ${Math.round(frequency)} Hz`, colorClass };
   };
 
   const display = getDisplayNote(currentNote);
@@ -464,7 +483,7 @@ function App() {
               <div className={`
                         relative flex flex-col items-center justify-center w-full md:w-64 h-32 rounded-2xl border transition-all duration-300
                         ${isLiveMicEnabled
-                  ? (currentNote ? 'bg-gradient-to-br from-indigo-600 to-purple-800 border-indigo-400/50 shadow-2xl shadow-indigo-500/20 scale-105' : 'bg-indigo-900/40 border-indigo-500/30 shadow-inner')
+                  ? (currentNote ? `shadow-2xl scale-105 ${display.colorClass}` : 'bg-indigo-900/40 border-indigo-500/30 shadow-inner')
                   : 'bg-gray-900/50 border-gray-800 grayscale opacity-80'}
                     `}>
                 <div className="absolute top-3 left-4 text-xs font-bold tracking-wider text-white/50 uppercase">Live Pitch</div>
@@ -620,7 +639,7 @@ function App() {
                     <div className={`
                         relative flex flex-col items-center justify-center w-40 h-24 rounded-2xl border backdrop-blur-md shadow-2xl
                         ${isLiveMicEnabled
-                        ? (currentNote ? 'bg-indigo-900/60 border-indigo-500/50 shadow-indigo-500/20' : 'bg-indigo-900/40 border-indigo-500/30')
+                        ? (currentNote ? display.colorClass : 'bg-indigo-900/40 border-indigo-500/30')
                         : 'bg-gray-900/50 border-gray-700/50 grayscale opacity-80'
                       }
                     `}>
