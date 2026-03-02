@@ -3,7 +3,7 @@ import AudioPlayer from './components/AudioPlayer';
 import Controls from './components/Controls';
 import TestRecorder from './components/TestRecorder';
 import PitchReferenceGuide from './components/PitchReferenceGuide';
-import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff, Info, Download, ListPlus, ListPlay } from 'lucide-react';
+import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff, Info, Download, PlusSquare, PlaySquare } from 'lucide-react';
 import { YIN } from 'pitchfinder';
 
 // Sargam Mapping Helpers
@@ -931,7 +931,7 @@ function App() {
                             className="flex items-center gap-1 px-3 py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-white text-xs font-bold transition shadow-md"
                             title="Save current loop to sequence"
                           >
-                            <ListPlus size={14} />
+                            <PlusSquare size={14} />
                             <span>Save({sequenceLoops.length})</span>
                           </button>
                           <button
@@ -943,7 +943,7 @@ function App() {
                               }`}
                             title="Play Sequence"
                           >
-                            <ListPlay size={14} />
+                            <PlaySquare size={14} />
                             <span className="hidden sm:inline">Play</span>
                           </button>
                         </div>

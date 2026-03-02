@@ -11,8 +11,8 @@ import {
     Rewind,
     Mic,
     PlayCircle,
-    ListPlus,
-    ListPlay
+    PlusSquare,
+    PlaySquare
 } from 'lucide-react';
 
 const Controls = ({
@@ -155,7 +155,7 @@ const Controls = ({
                             className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-white font-medium transition shadow-md"
                             title="Save current loop to sequence"
                         >
-                            <ListPlus size={18} />
+                            <PlusSquare size={18} />
                             <span>Save (+{sequenceLoops.length})</span>
                         </button>
                         <button
@@ -167,7 +167,7 @@ const Controls = ({
                                 }`}
                             title="Play all saved loops sequentially"
                         >
-                            <ListPlay size={18} />
+                            <PlaySquare size={18} />
                             <span>{isSequencePlaying ? 'Playing Seq...' : 'Play Seq'}</span>
                         </button>
                     </div>
