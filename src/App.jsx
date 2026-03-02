@@ -166,6 +166,43 @@ function App() {
     }
   };
 
+  const handleRemoveSequenceItem = (indexToRemove) => {
+    setSequenceLoops(prev => {
+      const newLoops = prev.filter((_, idx) => idx !== indexToRemove);
+      // Let's rely on a heavy-handed sync for now: clear all seq regions and re-add them 
+      // so their IDs and labels (Seq 1, Seq 2) match the new array state.
+      if (playerRef.current) {
+        playerRef.current.clearSequenceRegions();
+        // To avoid complex re-injection of regionsPlugin methods, we will just clear it entirely here,
+        // but that wipes active-loop too if we aren't careful.
+        // Let's implement a 'syncSequenceRegions' in AudioPlayer if we want to be safe,
+        // or just rebuild the sequence regions cleanly.
+        setTimeout(() => {
+          if (playerRef.current) {
+            playerRef.current.syncSequenceRegions(newLoops);
+          }
+        }, 50);
+      }
+      return newLoops;
+    });
+  };
+
+  const handleReorderSequence = (oldIndex, newIndex) => {
+    setSequenceLoops(prev => {
+      const newLoops = [...prev];
+      const item = newLoops.splice(oldIndex, 1)[0];
+      newLoops.splice(newIndex, 0, item);
+
+      if (playerRef.current) {
+        playerRef.current.clearSequenceRegions();
+        setTimeout(() => {
+          if (playerRef.current) playerRef.current.syncSequenceRegions(newLoops);
+        }, 50);
+      }
+      return newLoops;
+    });
+  };
+
   const handlePlaySequence = () => {
     if (sequenceLoops.length === 0 || !playerRef.current) return;
     setIsSequencePlaying(true);
@@ -1010,6 +1047,8 @@ function App() {
                   onClearSequence={handleClearSequence}
                   isSequenceLoopOnlyOnce={isSequenceLoopOnlyOnce}
                   setIsSequenceLoopOnlyOnce={setIsSequenceLoopOnlyOnce}
+                  onRemoveSequenceItem={handleRemoveSequenceItem}
+                  onReorderSequence={handleReorderSequence}
                 />
               )}
             </div> {/* End Fullscreen Container */}

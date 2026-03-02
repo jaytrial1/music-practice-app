@@ -196,6 +196,21 @@ const AudioPlayer = forwardRef(({
                 });
             }
         },
+        syncSequenceRegions: (loopsArray) => {
+            if (isReady && wavesurferRef.current && regionsPluginRef.current) {
+                loopsArray.forEach((loop, index) => {
+                    regionsPluginRef.current.addRegion({
+                        id: `seq-${index}`,
+                        start: loop.start,
+                        end: loop.end,
+                        content: `Seq ${index + 1}`,
+                        color: 'rgba(245, 158, 11, 0.4)', // Amber color
+                        drag: false,
+                        resize: false,
+                    });
+                });
+            }
+        },
         getCurrentRegionBounds: () => {
             if (!regionsPluginRef.current) return null;
             const region = regionsPluginRef.current.getRegions().find(r => r.id === 'active-loop');
@@ -227,10 +242,14 @@ const AudioPlayer = forwardRef(({
             }
             return null;
         },
-        playSequenceRegion: (start) => {
+        playSequenceRegion: (start, end) => {
             if (isReady && wavesurferRef.current) {
+                sequenceBoundariesRef.current = { start, end };
                 wavesurferRef.current.seekTo(start / wavesurferRef.current.getDuration());
             }
+        },
+        stopSequenceTracking: () => {
+            sequenceBoundariesRef.current = null;
         },
         startRecording: async () => {
             try {
@@ -549,6 +568,7 @@ const AudioPlayer = forwardRef(({
             ws.on('finish', () => onFinish && onFinish());
 
             ws.on('timeupdate', (currentTime) => {
+                // Pitch Update tracking logic
                 if (pitchData.length > 0 && decodingDuration > 0) {
                     const index = Math.floor((currentTime / decodingDuration) * pitchData.length);
                     const frequency = pitchData[index];
@@ -557,6 +577,16 @@ const AudioPlayer = forwardRef(({
                         onPitchUpdate && onPitchUpdate({ frequency, note });
                     } else {
                         onPitchUpdate && onPitchUpdate(null);
+                    }
+                }
+
+                // Sequence Manual Boundary Enforcement
+                if (sequenceBoundariesRef.current) {
+                    // Check if we hit or passed the sequence end bound
+                    if (currentTime >= sequenceBoundariesRef.current.end) {
+                        // Unset to prevent multiple rapid firings before App.jsx advances index
+                        sequenceBoundariesRef.current = null;
+                        if (onSequenceLoopEnd) onSequenceLoopEnd();
                     }
                 }
             });
