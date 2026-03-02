@@ -3,7 +3,7 @@ import AudioPlayer from './components/AudioPlayer';
 import Controls from './components/Controls';
 import TestRecorder from './components/TestRecorder';
 import PitchReferenceGuide from './components/PitchReferenceGuide';
-import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff, Info, Download, PlusSquare, PlaySquare } from 'lucide-react';
+import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff, Info, Download, PlusSquare, PlaySquare, Repeat, Repeat1, XSquare } from 'lucide-react';
 import { YIN } from 'pitchfinder';
 
 // Sargam Mapping Helpers
@@ -145,13 +145,20 @@ function App() {
   const handleAddRegion = () => playerRef.current?.addRegion();
   const handleClearRegions = () => {
     if (playerRef.current) playerRef.current.clearRegions();
+  };
+
+  const handleClearSequence = () => {
+    if (playerRef.current) playerRef.current.clearSequenceRegions();
     setSequenceLoops([]);
     setIsSequencePlaying(false);
   };
 
+  // Sequence Looping Toggle State
+  const [isSequenceLoopOnlyOnce, setIsSequenceLoopOnlyOnce] = useState(false);
+
   const handleAddSequenceLoop = () => {
     if (!playerRef.current) return;
-    const bounds = playerRef.current.getCurrentRegionBounds();
+    const bounds = playerRef.current.saveActiveRegionAsSequence(sequenceLoops.length);
     if (bounds) {
       setSequenceLoops(prev => [...prev, bounds]);
     } else {
@@ -164,7 +171,7 @@ function App() {
     setIsSequencePlaying(true);
     sequenceIndexRef.current = 0;
     const firstLoop = sequenceLoops[0];
-    playerRef.current.setRegionBounds(firstLoop.start, firstLoop.end);
+    playerRef.current.playSequenceRegion(firstLoop.start);
     if (!isPlaying) {
       setIsPlaying(true);
     }
@@ -178,12 +185,19 @@ function App() {
       // Move to next loop in sequence
       sequenceIndexRef.current = nextIndex;
       const nextLoop = sequenceLoops[nextIndex];
-      playerRef.current.setRegionBounds(nextLoop.start, nextLoop.end);
+      playerRef.current.playSequenceRegion(nextLoop.start);
     } else {
       // Sequence finished
-      setIsSequencePlaying(false);
-      setIsPlaying(false);
-      playerRef.current.stop();
+      if (isSequenceLoopOnlyOnce) {
+        setIsSequencePlaying(false);
+        setIsPlaying(false);
+        playerRef.current.stop();
+      } else {
+        // Loop the entire sequence again
+        sequenceIndexRef.current = 0;
+        const firstLoop = sequenceLoops[0];
+        playerRef.current.playSequenceRegion(firstLoop.start);
+      }
     }
   };
 
@@ -934,6 +948,15 @@ function App() {
                             <PlusSquare size={14} />
                             <span>Save({sequenceLoops.length})</span>
                           </button>
+
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setIsSequenceLoopOnlyOnce(!isSequenceLoopOnlyOnce); resetFsTimer(); }}
+                            className={`p-2 rounded-xl border transition ${!isSequenceLoopOnlyOnce ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : 'bg-gray-800 border-gray-700 text-gray-500 hover:bg-gray-700'}`}
+                            title={isSequenceLoopOnlyOnce ? "Play Once (Click to Loop)" : "Loop Infinitely (Click to Play Once)"}
+                          >
+                            {!isSequenceLoopOnlyOnce ? <Repeat size={14} /> : <Repeat1 size={14} />}
+                          </button>
+
                           <button
                             onClick={(e) => { e.stopPropagation(); handlePlaySequence(); resetFsTimer(); }}
                             disabled={sequenceLoops.length === 0}
@@ -946,6 +969,16 @@ function App() {
                             <PlaySquare size={14} />
                             <span className="hidden sm:inline">Play</span>
                           </button>
+
+                          {sequenceLoops.length > 0 && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleClearSequence(); resetFsTimer(); }}
+                              className="p-2 bg-gray-800/80 hover:bg-red-900/80 rounded-xl border border-gray-700/50 hover:border-red-500/50 text-gray-400 hover:text-red-300 transition"
+                              title="Clear Sequence"
+                            >
+                              <XSquare size={16} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -974,6 +1007,9 @@ function App() {
                   onAddSequenceLoop={handleAddSequenceLoop}
                   onPlaySequence={handlePlaySequence}
                   isSequencePlaying={isSequencePlaying}
+                  onClearSequence={handleClearSequence}
+                  isSequenceLoopOnlyOnce={isSequenceLoopOnlyOnce}
+                  setIsSequenceLoopOnlyOnce={setIsSequenceLoopOnlyOnce}
                 />
               )}
             </div> {/* End Fullscreen Container */}

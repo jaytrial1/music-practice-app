@@ -60,8 +60,14 @@ const AudioPlayer = forwardRef(({
         addRegion: () => {
             if (isReady && wavesurferRef.current && regionsPluginRef.current) {
                 const currentTime = wavesurferRef.current.getCurrentTime();
-                regionsPluginRef.current.clearRegions();
+
+                // Remove existing active loop if it exists
+                const regions = regionsPluginRef.current.getRegions();
+                const activeRegion = regions.find(r => r.id === 'active-loop');
+                if (activeRegion) activeRegion.remove();
+
                 const region = regionsPluginRef.current.addRegion({
+                    id: 'active-loop',
                     start: currentTime,
                     end: currentTime + 5,
                     content: 'Loop',
@@ -177,27 +183,52 @@ const AudioPlayer = forwardRef(({
             }
         },
         clearRegions: () => {
-            if (regionsPluginRef.current) regionsPluginRef.current.clearRegions();
+            if (regionsPluginRef.current) {
+                const activeRegion = regionsPluginRef.current.getRegions().find(r => r.id === 'active-loop');
+                if (activeRegion) activeRegion.remove();
+            }
+        },
+        clearSequenceRegions: () => {
+            if (regionsPluginRef.current) {
+                const regions = regionsPluginRef.current.getRegions();
+                regions.forEach(r => {
+                    if (r.id.startsWith('seq-')) r.remove();
+                });
+            }
         },
         getCurrentRegionBounds: () => {
             if (!regionsPluginRef.current) return null;
-            const regions = regionsPluginRef.current.getRegions();
-            if (regions.length > 0) {
-                return { start: regions[0].start, end: regions[0].end };
+            const region = regionsPluginRef.current.getRegions().find(r => r.id === 'active-loop');
+            if (region) {
+                return { start: region.start, end: region.end };
             }
             return null;
         },
-        setRegionBounds: (start, end) => {
+        saveActiveRegionAsSequence: (index) => {
             if (isReady && wavesurferRef.current && regionsPluginRef.current) {
-                regionsPluginRef.current.clearRegions();
-                const region = regionsPluginRef.current.addRegion({
-                    start,
-                    end,
-                    content: 'Sequence Loop',
-                    color: 'rgba(245, 158, 11, 0.3)', // Amber color to distinguish
-                    drag: false,
-                    resize: false, // Locked during sequence logic
-                });
+                const activeRegion = regionsPluginRef.current.getRegions().find(r => r.id === 'active-loop');
+                if (activeRegion) {
+                    const start = activeRegion.start;
+                    const end = activeRegion.end;
+                    activeRegion.remove(); // Un-trap the playhead
+
+                    // Add sequence region marker
+                    regionsPluginRef.current.addRegion({
+                        id: `seq-${index}`,
+                        start,
+                        end,
+                        content: `Seq ${index + 1}`,
+                        color: 'rgba(245, 158, 11, 0.4)', // Amber color
+                        drag: false,
+                        resize: false,
+                    });
+                    return { start, end };
+                }
+            }
+            return null;
+        },
+        playSequenceRegion: (start) => {
+            if (isReady && wavesurferRef.current) {
                 wavesurferRef.current.seekTo(start / wavesurferRef.current.getDuration());
             }
         },
@@ -546,11 +577,13 @@ const AudioPlayer = forwardRef(({
             });
 
             wsRegions.on('region-out', (region) => {
-                // If sequence playing mode is active via parent, call the hook. Otherwise default to standard looping.
-                if (onSequenceLoopEnd) {
-                    onSequenceLoopEnd();
-                } else {
-                    region.play();
+                if (region.id === 'active-loop') {
+                    region.play(); // Standard loop traps the playhead
+                } else if (region.id.startsWith('seq-')) {
+                    // Sequence loops only trigger callback to allow traversal if playing
+                    if (onSequenceLoopEnd) {
+                        onSequenceLoopEnd();
+                    }
                 }
             });
 
