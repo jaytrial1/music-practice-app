@@ -3,7 +3,7 @@ import AudioPlayer from './components/AudioPlayer';
 import Controls from './components/Controls';
 import TestRecorder from './components/TestRecorder';
 import PitchReferenceGuide from './components/PitchReferenceGuide';
-import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff, Info, Download } from 'lucide-react';
+import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff, Info, Download, ListPlus, ListPlay } from 'lucide-react';
 import { YIN } from 'pitchfinder';
 
 // Sargam Mapping Helpers
@@ -33,7 +33,13 @@ function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showFsControls, setShowFsControls] = useState(true);
   const [autoHideEnabled, setAutoHideEnabled] = useState(true);
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const fsTimerRef = useRef(null);
+
+  // Sequence Looping State
+  const [sequenceLoops, setSequenceLoops] = useState([]);
+  const [isSequencePlaying, setIsSequencePlaying] = useState(false);
+  const sequenceIndexRef = useRef(0);
 
   // Auto-hide fullscreen controls after 3 seconds
   const resetFsTimer = useCallback(() => {
@@ -137,7 +143,49 @@ function App() {
   const handleSkipBackward = () => playerRef.current?.skipAuthorization(-5);
   const handleSkipForward = () => playerRef.current?.skipAuthorization(5);
   const handleAddRegion = () => playerRef.current?.addRegion();
-  const handleClearRegions = () => playerRef.current?.clearRegions();
+  const handleClearRegions = () => {
+    if (playerRef.current) playerRef.current.clearRegions();
+    setSequenceLoops([]);
+    setIsSequencePlaying(false);
+  };
+
+  const handleAddSequenceLoop = () => {
+    if (!playerRef.current) return;
+    const bounds = playerRef.current.getCurrentRegionBounds();
+    if (bounds) {
+      setSequenceLoops(prev => [...prev, bounds]);
+    } else {
+      alert("Please set a standard loop region first to save it to a sequence.");
+    }
+  };
+
+  const handlePlaySequence = () => {
+    if (sequenceLoops.length === 0 || !playerRef.current) return;
+    setIsSequencePlaying(true);
+    sequenceIndexRef.current = 0;
+    const firstLoop = sequenceLoops[0];
+    playerRef.current.setRegionBounds(firstLoop.start, firstLoop.end);
+    if (!isPlaying) {
+      setIsPlaying(true);
+    }
+  };
+
+  const handleSequenceLoopEnd = () => {
+    if (!isSequencePlaying || sequenceLoops.length === 0 || !playerRef.current) return;
+
+    const nextIndex = sequenceIndexRef.current + 1;
+    if (nextIndex < sequenceLoops.length) {
+      // Move to next loop in sequence
+      sequenceIndexRef.current = nextIndex;
+      const nextLoop = sequenceLoops[nextIndex];
+      playerRef.current.setRegionBounds(nextLoop.start, nextLoop.end);
+    } else {
+      // Sequence finished
+      setIsSequencePlaying(false);
+      setIsPlaying(false);
+      playerRef.current.stop();
+    }
+  };
 
   // Recording Logic
   const [isRecording, setIsRecording] = useState(false);
@@ -470,46 +518,67 @@ function App() {
                   </button>
                 )}
 
-                {/* Root Key Selector */}
-                <div className="flex items-center gap-2 bg-gray-900 px-3 py-1.5 rounded-lg border border-gray-800">
-                  <span className="text-xs text-gray-400 uppercase font-bold">Sa (Key)</span>
-                  <select
-                    value={rootKey}
-                    onChange={(e) => setRootKey(e.target.value)}
-                    className="bg-transparent text-indigo-400 font-bold focus:outline-none cursor-pointer"
+                {/* Settings Dropdown Button */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSettingsMenu(!showSettingsMenu)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition ${showSettingsMenu ? 'bg-indigo-600 text-white shadow-lg' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
                   >
-                    {NOTES.map(note => (
-                      <option key={note} value={note} className="bg-gray-900">{note}</option>
-                    ))}
-                  </select>
+                    <Settings size={16} />
+                    <span>Settings</span>
+                  </button>
+
+                  {/* Settings Dropdown Menu */}
+                  {showSettingsMenu && (
+                    <div className="absolute top-full left-0 mt-2 w-56 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2">
+                      <div className="p-3 border-b border-gray-800 flex items-center justify-between">
+                        <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">Root Key (Sa)</span>
+                        <select
+                          value={rootKey}
+                          onChange={(e) => setRootKey(e.target.value)}
+                          className="bg-gray-800 text-indigo-400 font-bold px-2 py-1 flex-1 ml-3 rounded-md focus:outline-none cursor-pointer text-sm"
+                        >
+                          {NOTES.map(note => (
+                            <option key={note} value={note} className="bg-gray-900">{note}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <button
+                        onClick={() => setShowSargam(!showSargam)}
+                        className={`flex items-center gap-3 w-full p-3 text-left transition text-sm font-medium ${showSargam ? 'bg-indigo-600/20 text-indigo-300' : 'text-gray-300 hover:bg-gray-800'}`}
+                      >
+                        <Music2 size={16} />
+                        <span>Sargam Notation</span>
+                        <div className={`ml-auto w-8 h-4 rounded-full transition-colors relative ${showSargam ? 'bg-indigo-500' : 'bg-gray-700'}`}>
+                          <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${showSargam ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => setShowSpectrogram(!showSpectrogram)}
+                        className={`flex items-center gap-3 w-full p-3 text-left transition text-sm font-medium ${showSpectrogram ? 'bg-purple-600/20 text-purple-300' : 'text-gray-300 hover:bg-gray-800'}`}
+                      >
+                        <Waves size={16} />
+                        <span>Spectrogram</span>
+                        <div className={`ml-auto w-8 h-4 rounded-full transition-colors relative ${showSpectrogram ? 'bg-purple-500' : 'bg-gray-700'}`}>
+                          <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${showSpectrogram ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => setNotationMode(prev => prev === 'axis' ? 'floating' : 'axis')}
+                        className={`flex items-center gap-3 w-full p-3 text-left transition text-sm font-medium ${notationMode === 'floating' ? 'bg-amber-500/20 text-amber-300' : 'text-gray-300 hover:bg-gray-800'}`}
+                      >
+                        <Activity size={16} />
+                        <span>Floating Mode</span>
+                        <div className={`ml-auto w-8 h-4 rounded-full transition-colors relative ${notationMode === 'floating' ? 'bg-amber-500' : 'bg-gray-700'}`}>
+                          <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${notationMode === 'floating' ? 'translate-x-4' : 'translate-x-0'}`} />
+                        </div>
+                      </button>
+                    </div>
+                  )}
                 </div>
-
-                {/* Sargam Toggle */}
-                <button
-                  onClick={() => setShowSargam(!showSargam)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition ${showSargam ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
-                >
-                  <Music2 size={16} />
-                  <span>{showSargam ? 'Sargam' : 'A B C'}</span>
-                </button>
-
-                {/* Spectrogram Toggle */}
-                <button
-                  onClick={() => setShowSpectrogram(!showSpectrogram)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition ${showSpectrogram ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/20' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
-                >
-                  <Waves size={16} />
-                  <span>Spectrogram</span>
-                </button>
-
-                {/* Notation Mode Toggle */}
-                <button
-                  onClick={() => setNotationMode(prev => prev === 'axis' ? 'floating' : 'axis')}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition ${notationMode === 'floating' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
-                >
-                  <Activity size={16} />
-                  <span>{notationMode === 'axis' ? 'Axis Mode' : 'Floating Mode'}</span>
-                </button>
 
                 {/* Download Notations Button */}
                 <button
@@ -601,41 +670,73 @@ function App() {
                   isFullscreen={isFullscreen}
                   onFinish={() => setIsPlaying(false)}
                   onRecordingComplete={handleRecordingComplete}
+                  onSequenceLoopEnd={isSequencePlaying ? handleSequenceLoopEnd : undefined}
                 />
               </div>
 
               {/* ===== FULLSCREEN OVERLAY CONTROLS (YouTube-style) ===== */}
               {isFullscreen && (
                 <>
-                  {/* TOP-LEFT: Axis/Floating Mode + Sargam + Root Key */}
-                  <div className={`absolute top-4 left-4 z-20 flex items-center gap-2 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setNotationMode(prev => prev === 'axis' ? 'floating' : 'axis'); resetFsTimer(); }}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition backdrop-blur-md ${notationMode === 'floating' ? 'bg-amber-500/90 text-white' : 'bg-gray-800/80 text-gray-300 hover:bg-gray-700/80'}`}
-                    >
-                      <Activity size={16} />
-                      <span className="hidden sm:inline">{notationMode === 'axis' ? 'Axis' : 'Float'}</span>
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setShowSargam(!showSargam); resetFsTimer(); }}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition backdrop-blur-md ${showSargam ? 'bg-indigo-600/90 text-white' : 'bg-gray-800/80 text-gray-300 hover:bg-gray-700/80'}`}
-                    >
-                      <Music2 size={16} />
-                      <span className="hidden sm:inline">{showSargam ? 'Sa Re' : 'A B C'}</span>
-                    </button>
-
-                    {/* Root Key Selector */}
-                    <div className="flex items-center gap-2 bg-gray-800/80 px-3 py-2 rounded-lg border border-gray-700 backdrop-blur-md" onClick={(e) => e.stopPropagation()}>
-                      <span className="text-xs text-gray-400 uppercase font-bold hidden sm:inline">Sa</span>
-                      <select
-                        value={rootKey}
-                        onChange={(e) => { setRootKey(e.target.value); resetFsTimer(); }}
-                        className="bg-transparent text-indigo-400 font-bold focus:outline-none cursor-pointer text-sm"
+                  {/* TOP-LEFT: Settings Menu (Fullscreen) */}
+                  <div className={`absolute top-4 left-4 z-20 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
+                    <div className="relative">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setShowSettingsMenu(!showSettingsMenu); resetFsTimer(); }}
+                        className={`flex items-center justify-center w-10 h-10 rounded-xl transition backdrop-blur-md shadow-lg ${showSettingsMenu ? 'bg-indigo-600/90 text-white' : 'bg-gray-900/80 text-gray-300 hover:bg-gray-800/90 border border-gray-700/50'}`}
                       >
-                        {NOTES.map(note => (
-                          <option key={note} value={note} className="bg-gray-900">{note}</option>
-                        ))}
-                      </select>
+                        <Settings size={20} className={showSettingsMenu ? "animate-spin-slow" : ""} />
+                      </button>
+
+                      {/* Settings Dropdown Menu */}
+                      {showSettingsMenu && (
+                        <div onClick={(e) => e.stopPropagation()} className="absolute top-12 left-0 w-64 bg-gray-900/95 backdrop-blur-xl border border-gray-700 rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2">
+                          <div className="p-4 border-b border-gray-800 flex items-center justify-between bg-gray-800/30">
+                            <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">Root Key (Sa)</span>
+                            <select
+                              value={rootKey}
+                              onChange={(e) => { setRootKey(e.target.value); resetFsTimer(); }}
+                              className="bg-gray-800 text-indigo-400 font-bold px-3 py-1.5 flex-1 ml-4 rounded-lg focus:outline-none cursor-pointer text-sm border border-gray-700 focus:border-indigo-500 transition-colors"
+                            >
+                              {NOTES.map(note => (
+                                <option key={note} value={note} className="bg-gray-900">{note}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <button
+                            onClick={() => { setShowSargam(!showSargam); resetFsTimer(); }}
+                            className={`flex items-center gap-3 w-full p-4 text-left transition font-medium border-b border-gray-800/50 ${showSargam ? 'bg-indigo-600/10 text-indigo-300' : 'text-gray-300 hover:bg-gray-800/80'}`}
+                          >
+                            <Music2 size={18} className={showSargam ? 'text-indigo-400' : 'text-gray-500'} />
+                            <span>Sargam Notation</span>
+                            <div className={`ml-auto w-10 h-5 rounded-full transition-colors relative ${showSargam ? 'bg-indigo-500' : 'bg-gray-700'}`}>
+                              <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${showSargam ? 'translate-x-5' : 'translate-x-0'}`} />
+                            </div>
+                          </button>
+
+                          <button
+                            onClick={() => { setShowSpectrogram(!showSpectrogram); resetFsTimer(); }}
+                            className={`flex items-center gap-3 w-full p-4 text-left transition font-medium border-b border-gray-800/50 ${showSpectrogram ? 'bg-purple-600/10 text-purple-300' : 'text-gray-300 hover:bg-gray-800/80'}`}
+                          >
+                            <Waves size={18} className={showSpectrogram ? 'text-purple-400' : 'text-gray-500'} />
+                            <span>Spectrogram</span>
+                            <div className={`ml-auto w-10 h-5 rounded-full transition-colors relative ${showSpectrogram ? 'bg-purple-500' : 'bg-gray-700'}`}>
+                              <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${showSpectrogram ? 'translate-x-5' : 'translate-x-0'}`} />
+                            </div>
+                          </button>
+
+                          <button
+                            onClick={() => { setNotationMode(prev => prev === 'axis' ? 'floating' : 'axis'); resetFsTimer(); }}
+                            className={`flex items-center gap-3 w-full p-4 text-left transition font-medium ${notationMode === 'floating' ? 'bg-amber-500/10 text-amber-300' : 'text-gray-300 hover:bg-gray-800/80'}`}
+                          >
+                            <Activity size={18} className={notationMode === 'floating' ? 'text-amber-400' : 'text-gray-500'} />
+                            <span>Floating Mode</span>
+                            <div className={`ml-auto w-10 h-5 rounded-full transition-colors relative ${notationMode === 'floating' ? 'bg-amber-500' : 'bg-gray-700'}`}>
+                              <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${notationMode === 'floating' ? 'translate-x-5' : 'translate-x-0'}`} />
+                            </div>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -803,22 +904,49 @@ function App() {
                       <div className="w-px h-8 bg-gray-700 mx-1 hidden sm:block"></div>
 
                       {/* Loop Controls (Right) */}
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleAddRegion(); resetFsTimer(); }}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 border border-indigo-500 hover:bg-indigo-500 rounded-xl text-white text-sm font-bold transition shadow-md"
-                          title="Set Loop"
-                        >
-                          <Flag size={16} />
-                          <span>Loop</span>
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleClearRegions(); resetFsTimer(); }}
-                          className="p-2 bg-gray-800/80 hover:bg-red-900/80 rounded-xl border border-gray-700/50 hover:border-red-500/50 text-gray-400 hover:text-red-300 transition"
-                          title="Clear Loops"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                      <div className="flex flex-col sm:flex-row items-center gap-2">
+                        {/* Standard Loop */}
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleAddRegion(); resetFsTimer(); }}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 border border-indigo-500 hover:bg-indigo-500 rounded-xl text-white text-xs font-bold transition shadow-md"
+                            title="Set Loop"
+                          >
+                            <Flag size={14} />
+                            <span>Loop</span>
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleClearRegions(); resetFsTimer(); }}
+                            className="p-2 bg-gray-800/80 hover:bg-red-900/80 rounded-xl border border-gray-700/50 hover:border-red-500/50 text-gray-400 hover:text-red-300 transition"
+                            title="Clear Loops"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+
+                        {/* Sequence Loop (Appears when standard loop exists, or always visible) */}
+                        <div className="flex items-center gap-1 sm:border-l border-gray-700 sm:pl-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleAddSequenceLoop(); resetFsTimer(); }}
+                            className="flex items-center gap-1 px-3 py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-white text-xs font-bold transition shadow-md"
+                            title="Save current loop to sequence"
+                          >
+                            <ListPlus size={14} />
+                            <span>Save({sequenceLoops.length})</span>
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handlePlaySequence(); resetFsTimer(); }}
+                            disabled={sequenceLoops.length === 0}
+                            className={`flex items-center gap-1 px-3 py-2 rounded-xl text-white text-xs font-bold transition shadow-md ${sequenceLoops.length > 0
+                              ? (isSequencePlaying ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'bg-emerald-600 hover:bg-emerald-500')
+                              : 'bg-gray-700 text-gray-500 opacity-50 cursor-not-allowed'
+                              }`}
+                            title="Play Sequence"
+                          >
+                            <ListPlay size={14} />
+                            <span className="hidden sm:inline">Play</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -842,6 +970,10 @@ function App() {
                   onRecordToggle={handleRecordToggle}
                   userAudioUrl={userAudioUrl}
                   onPlayRecording={handlePlayRecording}
+                  sequenceLoops={sequenceLoops}
+                  onAddSequenceLoop={handleAddSequenceLoop}
+                  onPlaySequence={handlePlaySequence}
+                  isSequencePlaying={isSequencePlaying}
                 />
               )}
             </div> {/* End Fullscreen Container */}

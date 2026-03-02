@@ -23,7 +23,8 @@ const AudioPlayer = forwardRef(({
     onFinish,
     onRegionCreated,
     onPitchUpdate,
-    onRecordingComplete // Callback with { audioBlob, pitchSegments }
+    onRecordingComplete, // Callback with { audioBlob, pitchSegments }
+    onSequenceLoopEnd // New callback for sequential playback
 }, ref) => {
     const containerRef = useRef(null);
     const spectrogramRef = useRef(null);
@@ -177,6 +178,28 @@ const AudioPlayer = forwardRef(({
         },
         clearRegions: () => {
             if (regionsPluginRef.current) regionsPluginRef.current.clearRegions();
+        },
+        getCurrentRegionBounds: () => {
+            if (!regionsPluginRef.current) return null;
+            const regions = regionsPluginRef.current.getRegions();
+            if (regions.length > 0) {
+                return { start: regions[0].start, end: regions[0].end };
+            }
+            return null;
+        },
+        setRegionBounds: (start, end) => {
+            if (isReady && wavesurferRef.current && regionsPluginRef.current) {
+                regionsPluginRef.current.clearRegions();
+                const region = regionsPluginRef.current.addRegion({
+                    start,
+                    end,
+                    content: 'Sequence Loop',
+                    color: 'rgba(245, 158, 11, 0.3)', // Amber color to distinguish
+                    drag: false,
+                    resize: false, // Locked during sequence logic
+                });
+                wavesurferRef.current.seekTo(start / wavesurferRef.current.getDuration());
+            }
         },
         startRecording: async () => {
             try {
@@ -522,7 +545,14 @@ const AudioPlayer = forwardRef(({
                 setIsReady(false);
             });
 
-            wsRegions.on('region-out', (region) => region.play());
+            wsRegions.on('region-out', (region) => {
+                // If sequence playing mode is active via parent, call the hook. Otherwise default to standard looping.
+                if (onSequenceLoopEnd) {
+                    onSequenceLoopEnd();
+                } else {
+                    region.play();
+                }
+            });
 
             if (typeof audioFile === 'string') {
                 ws.load(audioFile);
