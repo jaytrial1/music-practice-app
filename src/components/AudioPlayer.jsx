@@ -31,6 +31,11 @@ const AudioPlayer = forwardRef(({
     const wavesurferRef = useRef(null);
     const regionsPluginRef = useRef(null);
 
+    // Sequence playback boundary tracker
+    const sequenceBoundariesRef = useRef(null);
+    // Ref to always hold the latest onSequenceLoopEnd callback (avoids stale closures)
+    const onSequenceLoopEndRef = useRef(onSequenceLoopEnd);
+
     // Recording Refs
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
@@ -43,6 +48,11 @@ const AudioPlayer = forwardRef(({
     const [error, setError] = useState(null);
     const [pitchData, setPitchData] = useState([]);
     const [decodingDuration, setDecodingDuration] = useState(0);
+
+    // Keep the ref in sync with the latest prop on every render
+    useEffect(() => {
+        onSequenceLoopEndRef.current = onSequenceLoopEnd;
+    }, [onSequenceLoopEnd]);
 
     useImperativeHandle(ref, () => ({
         playPause: () => {
@@ -593,7 +603,8 @@ const AudioPlayer = forwardRef(({
                     if (currentTime >= sequenceBoundariesRef.current.end) {
                         // Unset to prevent multiple rapid firings before App.jsx advances index
                         sequenceBoundariesRef.current = null;
-                        if (onSequenceLoopEnd) onSequenceLoopEnd();
+                        // Use ref to always call the latest callback (avoids stale closure)
+                        if (onSequenceLoopEndRef.current) onSequenceLoopEndRef.current();
                     }
                 }
             });
@@ -618,8 +629,8 @@ const AudioPlayer = forwardRef(({
                     region.play(); // Standard loop traps the playhead
                 } else if (region.id.startsWith('seq-')) {
                     // Sequence loops only trigger callback to allow traversal if playing
-                    if (onSequenceLoopEnd) {
-                        onSequenceLoopEnd();
+                    if (onSequenceLoopEndRef.current) {
+                        onSequenceLoopEndRef.current();
                     }
                 }
             });
