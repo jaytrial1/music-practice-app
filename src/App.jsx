@@ -3,7 +3,7 @@ import AudioPlayer from './components/AudioPlayer';
 import Controls from './components/Controls';
 import TestRecorder from './components/TestRecorder';
 import PitchReferenceGuide from './components/PitchReferenceGuide';
-import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff, Info, Download, PlusSquare, PlaySquare, Repeat, Repeat1, XSquare } from 'lucide-react';
+import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff, Info, Download, PlusSquare, PlaySquare, Repeat, Repeat1, XSquare, ArrowLeft, ArrowRight } from 'lucide-react';
 import { YIN } from 'pitchfinder';
 
 // Sargam Mapping Helpers
@@ -208,7 +208,7 @@ function App() {
     setIsSequencePlaying(true);
     sequenceIndexRef.current = 0;
     const firstLoop = sequenceLoops[0];
-    playerRef.current.playSequenceRegion(firstLoop.start);
+    playerRef.current.playSequenceRegion(firstLoop.start, firstLoop.end);
     if (!isPlaying) {
       setIsPlaying(true);
     }
@@ -222,7 +222,7 @@ function App() {
       // Move to next loop in sequence
       sequenceIndexRef.current = nextIndex;
       const nextLoop = sequenceLoops[nextIndex];
-      playerRef.current.playSequenceRegion(nextLoop.start);
+      playerRef.current.playSequenceRegion(nextLoop.start, nextLoop.end);
     } else {
       // Sequence finished
       if (isSequenceLoopOnlyOnce) {
@@ -233,7 +233,7 @@ function App() {
         // Loop the entire sequence again
         sequenceIndexRef.current = 0;
         const firstLoop = sequenceLoops[0];
-        playerRef.current.playSequenceRegion(firstLoop.start);
+        playerRef.current.playSequenceRegion(firstLoop.start, firstLoop.end);
       }
     }
   };
@@ -975,46 +975,80 @@ function App() {
                           </button>
                         </div>
 
-                        {/* Sequence Loop (Appears when standard loop exists, or always visible) */}
-                        <div className="flex items-center gap-1 sm:border-l border-gray-700 sm:pl-2">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleAddSequenceLoop(); resetFsTimer(); }}
-                            className="flex items-center gap-1 px-3 py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-white text-xs font-bold transition shadow-md"
-                            title="Save current loop to sequence"
-                          >
-                            <PlusSquare size={14} />
-                            <span>Save({sequenceLoops.length})</span>
-                          </button>
-
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setIsSequenceLoopOnlyOnce(!isSequenceLoopOnlyOnce); resetFsTimer(); }}
-                            className={`p-2 rounded-xl border transition ${!isSequenceLoopOnlyOnce ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : 'bg-gray-800 border-gray-700 text-gray-500 hover:bg-gray-700'}`}
-                            title={isSequenceLoopOnlyOnce ? "Play Once (Click to Loop)" : "Loop Infinitely (Click to Play Once)"}
-                          >
-                            {!isSequenceLoopOnlyOnce ? <Repeat size={14} /> : <Repeat1 size={14} />}
-                          </button>
-
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handlePlaySequence(); resetFsTimer(); }}
-                            disabled={sequenceLoops.length === 0}
-                            className={`flex items-center gap-1 px-3 py-2 rounded-xl text-white text-xs font-bold transition shadow-md ${sequenceLoops.length > 0
-                              ? (isSequencePlaying ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'bg-emerald-600 hover:bg-emerald-500')
-                              : 'bg-gray-700 text-gray-500 opacity-50 cursor-not-allowed'
-                              }`}
-                            title="Play Sequence"
-                          >
-                            <PlaySquare size={14} />
-                            <span className="hidden sm:inline">Play</span>
-                          </button>
-
-                          {sequenceLoops.length > 0 && (
+                        {/* Sequence Loop */}
+                        <div className="flex flex-col sm:border-l border-gray-700 sm:pl-2 gap-2">
+                          <div className="flex items-center gap-1">
                             <button
-                              onClick={(e) => { e.stopPropagation(); handleClearSequence(); resetFsTimer(); }}
-                              className="p-2 bg-gray-800/80 hover:bg-red-900/80 rounded-xl border border-gray-700/50 hover:border-red-500/50 text-gray-400 hover:text-red-300 transition"
-                              title="Clear Sequence"
+                              onClick={(e) => { e.stopPropagation(); handleAddSequenceLoop(); resetFsTimer(); }}
+                              className="flex items-center gap-1 px-3 py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-white text-xs font-bold transition shadow-md"
+                              title="Save current loop to sequence"
                             >
-                              <XSquare size={16} />
+                              <PlusSquare size={14} />
+                              <span>Save({sequenceLoops.length})</span>
                             </button>
+
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setIsSequenceLoopOnlyOnce(!isSequenceLoopOnlyOnce); resetFsTimer(); }}
+                              className={`p-2 rounded-xl border transition ${!isSequenceLoopOnlyOnce ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : 'bg-gray-800 border-gray-700 text-gray-500 hover:bg-gray-700'}`}
+                              title={isSequenceLoopOnlyOnce ? "Play Once (Click to Loop)" : "Loop Infinitely (Click to Play Once)"}
+                            >
+                              {!isSequenceLoopOnlyOnce ? <Repeat size={14} /> : <Repeat1 size={14} />}
+                            </button>
+
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handlePlaySequence(); resetFsTimer(); }}
+                              disabled={sequenceLoops.length === 0}
+                              className={`flex items-center gap-1 px-3 py-2 rounded-xl text-white text-xs font-bold transition shadow-md ${sequenceLoops.length > 0
+                                ? (isSequencePlaying ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'bg-emerald-600 hover:bg-emerald-500')
+                                : 'bg-gray-700 text-gray-500 opacity-50 cursor-not-allowed'
+                                }`}
+                              title="Play Sequence"
+                            >
+                              <PlaySquare size={14} />
+                              <span className="hidden sm:inline">Play</span>
+                            </button>
+
+                            {sequenceLoops.length > 0 && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleClearSequence(); resetFsTimer(); }}
+                                className="p-2 bg-gray-800/80 hover:bg-red-900/80 rounded-xl border border-gray-700/50 hover:border-red-500/50 text-gray-400 hover:text-red-300 transition"
+                                title="Clear Sequence"
+                              >
+                                <XSquare size={16} />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Sequence Reorder UI Fullscreen */}
+                          {sequenceLoops.length > 0 && (
+                            <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-[250px] sm:max-w-xs hidden-scrollbar pt-1">
+                              {sequenceLoops.map((loop, idx) => (
+                                <div key={idx} className="flex flex-col items-center min-w-max bg-gray-900/80 rounded border border-gray-700 p-1 gap-1">
+                                  <div className="flex items-center justify-between w-full px-1">
+                                    <span className="text-[10px] text-amber-500 font-bold">Seq {idx + 1}</span>
+                                    <button onClick={(e) => { e.stopPropagation(); handleRemoveSequenceItem(idx); resetFsTimer(); }} className="text-gray-500 hover:text-red-400 p-0.5">
+                                      <XSquare size={12} />
+                                    </button>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleReorderSequence(idx, idx - 1); resetFsTimer(); }}
+                                      disabled={idx === 0}
+                                      className="p-1 bg-gray-800 rounded hover:bg-amber-600 hover:text-white disabled:opacity-30 transition"
+                                    >
+                                      <ArrowLeft size={10} />
+                                    </button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleReorderSequence(idx, idx + 1); resetFsTimer(); }}
+                                      disabled={idx === sequenceLoops.length - 1}
+                                      className="p-1 bg-gray-800 rounded hover:bg-amber-600 hover:text-white disabled:opacity-30 transition"
+                                    >
+                                      <ArrowRight size={10} />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           )}
                         </div>
                       </div>

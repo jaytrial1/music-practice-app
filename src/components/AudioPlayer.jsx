@@ -150,8 +150,8 @@ const AudioPlayer = forwardRef(({
                             dragHandle.style.cursor = 'grabbing';
                             dragHandle.style.backgroundColor = 'rgba(67, 56, 202, 1)';
                         });
-
-                        window.addEventListener('pointermove', (e) => {
+                        // Store listeners so they can be removed
+                        const onPointerMove = (e) => {
                             if (!isDragging || !wavesurferRef.current) return;
                             const dx = e.clientX - startX;
                             const wrapper = wavesurferRef.current.getWrapper();
@@ -161,18 +161,25 @@ const AudioPlayer = forwardRef(({
                             const newStart = Math.max(0, initialStart + dt);
                             const newEnd = Math.min(wavesurferRef.current.getDuration(), initialEnd + dt);
 
-                            // Prevent dragging outside bounds
                             if (newStart >= 0 && newEnd <= wavesurferRef.current.getDuration()) {
                                 region.setOptions({ start: newStart, end: newEnd });
                             }
-                        });
+                        };
 
-                        window.addEventListener('pointerup', () => {
+                        const onPointerUp = () => {
                             if (isDragging) {
                                 isDragging = false;
                                 dragHandle.style.cursor = 'grab';
                                 dragHandle.style.backgroundColor = 'rgba(99, 102, 241, 0.95)';
                             }
+                        };
+
+                        window.addEventListener('pointermove', onPointerMove);
+                        window.addEventListener('pointerup', onPointerUp);
+
+                        region.on('remove', () => {
+                            window.removeEventListener('pointermove', onPointerMove);
+                            window.removeEventListener('pointerup', onPointerUp);
                         });
 
                         region.element.appendChild(dragHandle);
