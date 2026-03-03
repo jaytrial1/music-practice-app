@@ -137,6 +137,11 @@ function App() {
   };
 
   const togglePlay = () => {
+    // If we're in sequence mode, exit it so normal playback resumes freely
+    if (isSequencePlaying) {
+      setIsSequencePlaying(false);
+      if (playerRef.current) playerRef.current.stopSequenceTracking();
+    }
     setIsPlaying(prev => !prev);
   };
 
@@ -205,6 +210,14 @@ function App() {
 
   const handlePlaySequence = () => {
     if (sequenceLoops.length === 0 || !playerRef.current) return;
+
+    // If already playing sequence, stop it
+    if (isSequencePlaying) {
+      setIsSequencePlaying(false);
+      playerRef.current.stopSequenceTracking();
+      return;
+    }
+
     setIsSequencePlaying(true);
     sequenceIndexRef.current = 0;
     const firstLoop = sequenceLoops[0];
@@ -227,6 +240,7 @@ function App() {
       // Sequence finished
       if (isSequenceLoopOnlyOnce) {
         setIsSequencePlaying(false);
+        playerRef.current.stopSequenceTracking();
         setIsPlaying(false);
         playerRef.current.stop();
       } else {
