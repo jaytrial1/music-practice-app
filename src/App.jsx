@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
 import AudioPlayer from './components/AudioPlayer';
 import Controls from './components/Controls';
 import TestRecorder from './components/TestRecorder';
@@ -50,7 +50,7 @@ function App() {
     }
   }, [autoHideEnabled]);
 
-  // Click/tap handler for fullscreen — toggle controls
+  // Click/tap handler for fullscreen â€” toggle controls
   const handleFsClick = useCallback((e) => {
     // Don't toggle if clicking a button or control
     if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select')) return;
@@ -59,11 +59,11 @@ function App() {
     if (!autoHideEnabled) return;
 
     if (showFsControls) {
-      // Currently visible → hide immediately
+      // Currently visible â†’ hide immediately
       if (fsTimerRef.current) clearTimeout(fsTimerRef.current);
       setShowFsControls(false);
     } else {
-      // Currently hidden → show + start auto-hide timer
+      // Currently hidden â†’ show + start auto-hide timer
       resetFsTimer();
     }
   }, [showFsControls, resetFsTimer, autoHideEnabled]);
@@ -258,11 +258,11 @@ function App() {
 
   const handleRecordToggle = () => {
     if (isRecording) {
-      // STOP — keep song playing so user can compare
+      // STOP â€” keep song playing so user can compare
       playerRef.current?.stopRecording();
       setIsRecording(false);
     } else {
-      // START — song keeps playing, echoCancellation is forced OFF in AudioPlayer
+      // START â€” song keeps playing, echoCancellation is forced OFF in AudioPlayer
       playerRef.current?.startRecording();
       setIsRecording(true);
       setUserAudioUrl(null);
@@ -792,7 +792,7 @@ function App() {
 
                           <button
                             onClick={() => { setNotationMode(prev => prev === 'axis' ? 'floating' : 'axis'); resetFsTimer(); }}
-                            className={`flex items-center gap-3 w-full p-4 text-left transition font-medium ${notationMode === 'floating' ? 'bg-amber-500/10 text-amber-300' : 'text-gray-300 hover:bg-gray-800/80'}`}
+                            className={`flex items-center gap-3 w-full p-4 text-left transition font-medium border-b border-gray-800/50 ${notationMode === 'floating' ? 'bg-amber-500/10 text-amber-300' : 'text-gray-300 hover:bg-gray-800/80'}`}
                           >
                             <Activity size={18} className={notationMode === 'floating' ? 'text-amber-400' : 'text-gray-500'} />
                             <span>Floating Mode</span>
@@ -800,326 +800,335 @@ function App() {
                               <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${notationMode === 'floating' ? 'translate-x-5' : 'translate-x-0'}`} />
                             </div>
                           </button>
+
+                          {/* Speed Control (moved here from bottom bar) */}
+                          <div className="p-4 border-t border-gray-800/50">
+                            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-2">Playback Speed</span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {[0.5, 0.75, 1, 1.25, 1.5].map(rate => (
+                                <button
+                                  key={rate}
+                                  onClick={(e) => { e.stopPropagation(); setPlaybackRate(rate); resetFsTimer(); }}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${playbackRate === rate ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-700 bg-gray-800'}`}
+                                >
+                                  {rate}x
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
                   </div>
+                    {/* TOP-CENTER: Zoom Controls */}
+                    <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-20 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
+                      <div className="flex items-center gap-4 bg-gray-900/90 backdrop-blur-xl px-4 py-2 rounded-xl border border-gray-700/50 shadow-xl">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setZoom(z => Math.max(10, z - 30)); resetFsTimer(); }}
+                          className="p-1 text-gray-400 hover:text-white transition"
+                        >
+                          <ZoomOut size={16} />
+                        </button>
+                        <span className="text-xs text-gray-500 font-bold tracking-wider uppercase">Zoom</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setZoom(z => Math.min(500, z + 30)); resetFsTimer(); }}
+                          className="p-1 text-gray-400 hover:text-white transition"
+                        >
+                          <ZoomIn size={16} />
+                        </button>
+                      </div>
+                    </div>
 
-                  {/* TOP-CENTER: Zoom Controls */}
-                  <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-20 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
-                    <div className="flex items-center gap-4 bg-gray-900/90 backdrop-blur-xl px-4 py-2 rounded-xl border border-gray-700/50 shadow-xl">
+                    {/* TOP-RIGHT: Pin Controls & Exit Fullscreen */}
+                    <div className={`absolute top-4 right-4 z-20 flex items-center gap-2 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
                       <button
-                        onClick={(e) => { e.stopPropagation(); setZoom(z => Math.max(10, z - 30)); resetFsTimer(); }}
-                        className="p-1 text-gray-400 hover:text-white transition"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAutoHideEnabled(!autoHideEnabled);
+                          if (!autoHideEnabled && fsTimerRef.current) {
+                            // If turning on auto-hide, start the timer
+                            fsTimerRef.current = setTimeout(() => setShowFsControls(false), 3000);
+                          } else if (fsTimerRef.current) {
+                            // If turning off auto-hide, clear the timer
+                            clearTimeout(fsTimerRef.current);
+                          }
+                        }}
+                        className={`p-2 rounded-lg transition backdrop-blur-md ${!autoHideEnabled ? 'bg-indigo-600/90 text-white' : 'bg-gray-800/80 hover:bg-gray-700 text-gray-400 hover:text-white'}`}
+                        title={!autoHideEnabled ? "Controls Pinned (Always Show)" : "Controls Auto-Hide"}
                       >
-                        <ZoomOut size={16} />
+                        {!autoHideEnabled ? <Pin size={20} /> : <PinOff size={20} />}
                       </button>
-                      <span className="text-xs text-gray-500 font-bold tracking-wider uppercase">Zoom</span>
+
                       <button
-                        onClick={(e) => { e.stopPropagation(); setZoom(z => Math.min(500, z + 30)); resetFsTimer(); }}
-                        className="p-1 text-gray-400 hover:text-white transition"
+                        onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
+                        className="p-2 bg-gray-800/80 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition backdrop-blur-md"
+                        title="Exit Fullscreen"
                       >
-                        <ZoomIn size={16} />
+                        <Minimize2 size={20} />
                       </button>
                     </div>
-                  </div>
 
-                  {/* TOP-RIGHT: Pin Controls & Exit Fullscreen */}
-                  <div className={`absolute top-4 right-4 z-20 flex items-center gap-2 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setAutoHideEnabled(!autoHideEnabled);
-                        if (!autoHideEnabled && fsTimerRef.current) {
-                          // If turning on auto-hide, start the timer
-                          fsTimerRef.current = setTimeout(() => setShowFsControls(false), 3000);
-                        } else if (fsTimerRef.current) {
-                          // If turning off auto-hide, clear the timer
-                          clearTimeout(fsTimerRef.current);
-                        }
-                      }}
-                      className={`p-2 rounded-lg transition backdrop-blur-md ${!autoHideEnabled ? 'bg-indigo-600/90 text-white' : 'bg-gray-800/80 hover:bg-gray-700 text-gray-400 hover:text-white'}`}
-                      title={!autoHideEnabled ? "Controls Pinned (Always Show)" : "Controls Auto-Hide"}
-                    >
-                      {!autoHideEnabled ? <Pin size={20} /> : <PinOff size={20} />}
-                    </button>
-
-                    <button
-                      onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }}
-                      className="p-2 bg-gray-800/80 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition backdrop-blur-md"
-                      title="Exit Fullscreen"
-                    >
-                      <Minimize2 size={20} />
-                    </button>
-                  </div>
-
-                  {/* FULLSCREEN CURRENT NOTE DISPLAY */}
-                  <div className={`absolute left-8 bottom-32 z-20 transition-all duration-300 ${!isLiveMicEnabled ? 'pointer-events-auto' : 'pointer-events-none'} ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
-                    <div className={`
+                    {/* FULLSCREEN CURRENT NOTE DISPLAY */}
+                    <div className={`absolute left-8 bottom-32 z-20 transition-all duration-300 ${!isLiveMicEnabled ? 'pointer-events-auto' : 'pointer-events-none'} ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
+                      <div className={`
                         relative flex flex-col items-center justify-center w-40 h-24 rounded-2xl border backdrop-blur-md shadow-2xl
                         ${isLiveMicEnabled
-                        ? (currentNote ? display.colors.base : 'bg-indigo-900/40 border-indigo-500/30')
-                        : 'bg-gray-900/50 border-gray-700/50 grayscale opacity-80'
-                      }
+                          ? (currentNote ? display.colors.base : 'bg-indigo-900/40 border-indigo-500/30')
+                          : 'bg-gray-900/50 border-gray-700/50 grayscale opacity-80'
+                        }
                     `}>
-                      <div className="absolute top-2 left-3 text-[10px] items-center flex gap-1 font-bold tracking-wider text-white/50 uppercase pointer-events-auto">
-                        <span>Live Pitch</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setShowPitchGuide(true); }}
-                          className="text-indigo-400/50 hover:text-indigo-300 transition-colors"
-                        >
-                          <Info size={12} />
-                        </button>
-                      </div>
-
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setIsLiveMicEnabled(!isLiveMicEnabled); }}
-                        className={`absolute top-2 right-2 p-1 rounded-lg transition-colors border pointer-events-auto ${isLiveMicEnabled ? 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30' : 'bg-gray-800 border-gray-700 text-gray-500 hover:text-white hover:bg-gray-700'}`}
-                        title={isLiveMicEnabled ? "Disable Live Pitch" : "Enable Live Pitch"}
-                      >
-                        {isLiveMicEnabled ? <Mic size={12} /> : <MicOff size={12} />}
-                      </button>
-
-                      {!isLiveMicEnabled ? (
-                        <div className="text-gray-500 text-xs font-medium mt-3 pointer-events-none">Mic Disabled</div>
-                      ) : currentNote ? (
-                        <>
-                          <div className={`text-4xl font-black tracking-tighter drop-shadow-lg mt-2 pointer-events-none ${display.colors.text}`}>
-                            {display.main}
-                          </div>
-                          <div className={`text-xs font-mono mt-0.5 pointer-events-none ${display.colors.subText}`}>
-                            {display.sub}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex flex-col items-center text-indigo-400 gap-1.5 mt-3 pointer-events-none">
-                          <Activity size={18} className="animate-pulse" />
-                          <span className="text-xs">Listening...</span>
+                        <div className="absolute top-2 left-3 text-[10px] items-center flex gap-1 font-bold tracking-wider text-white/50 uppercase pointer-events-auto">
+                          <span>Live Pitch</span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setShowPitchGuide(true); }}
+                            className="text-indigo-400/50 hover:text-indigo-300 transition-colors"
+                          >
+                            <Info size={12} />
+                          </button>
                         </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* BOTTOM-CENTER: Main Controls */}
-                  <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-3 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-
-                    {/* Main Actions (Bottom Row) */}
-                    <div className="flex items-center gap-4 bg-gray-900/90 backdrop-blur-xl px-6 py-3 rounded-2xl border border-gray-700/50 shadow-2xl">
-
-                      {/* Speed Control (Moved to Left) */}
-                      <div className="flex items-center gap-1.5 bg-gray-800/80 px-2 py-1.5 rounded-xl border border-gray-700/50">
-                        <span className="text-[10px] text-gray-400 font-bold uppercase ml-1 mr-1 hidden sm:inline">Speed</span>
-                        {[0.5, 0.75, 1, 1.25, 1.5].map(rate => (
-                          <button
-                            key={rate}
-                            onClick={(e) => { e.stopPropagation(); setPlaybackRate(rate); resetFsTimer(); }}
-                            className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${playbackRate === rate ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
-                          >
-                            {rate}x
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Divider */}
-                      <div className="w-px h-8 bg-gray-700 mx-1 hidden sm:block"></div>
-
-                      {/* Playback Controls (Moved to Middle) */}
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleSkipBackward(); resetFsTimer(); }}
-                          className="p-2 text-gray-400 hover:text-white transition"
-                        >
-                          <Rewind size={20} />
-                        </button>
 
                         <button
-                          onClick={(e) => { e.stopPropagation(); togglePlay(); resetFsTimer(); }}
-                          className={`p-4 rounded-full transition shadow-lg ${isPlaying ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
+                          onClick={(e) => { e.stopPropagation(); setIsLiveMicEnabled(!isLiveMicEnabled); }}
+                          className={`absolute top-2 right-2 p-1 rounded-lg transition-colors border pointer-events-auto ${isLiveMicEnabled ? 'bg-red-500/20 border-red-500/50 text-red-400 hover:bg-red-500/30' : 'bg-gray-800 border-gray-700 text-gray-500 hover:text-white hover:bg-gray-700'}`}
+                          title={isLiveMicEnabled ? "Disable Live Pitch" : "Enable Live Pitch"}
                         >
-                          {isPlaying ? <Pause size={24} fill="white" /> : <Play size={24} fill="white" className="ml-0.5" />}
+                          {isLiveMicEnabled ? <Mic size={12} /> : <MicOff size={12} />}
                         </button>
 
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleRecordToggle(); resetFsTimer(); }}
-                          className={`p-3 rounded-full transition ${isRecording ? 'bg-red-600 animate-pulse ring-4 ring-red-500/30' : 'bg-gray-700 hover:bg-gray-600 text-white'}`}
-                        >
-                          <Mic2 size={20} />
-                        </button>
-
-                        {/* Play My Recording */}
-                        {userAudioUrl && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handlePlayRecording(); resetFsTimer(); }}
-                            className="p-3 bg-orange-600 hover:bg-orange-700 rounded-full transition text-white shadow-lg"
-                            title="Play My Recording"
-                          >
-                            <PlayCircle size={20} />
-                          </button>
+                        {!isLiveMicEnabled ? (
+                          <div className="text-gray-500 text-xs font-medium mt-3 pointer-events-none">Mic Disabled</div>
+                        ) : currentNote ? (
+                          <>
+                            <div className={`text-4xl font-black tracking-tighter drop-shadow-lg mt-2 pointer-events-none ${display.colors.text}`}>
+                              {display.main}
+                            </div>
+                            <div className={`text-xs font-mono mt-0.5 pointer-events-none ${display.colors.subText}`}>
+                              {display.sub}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-center text-indigo-400 gap-1.5 mt-3 pointer-events-none">
+                            <Activity size={18} className="animate-pulse" />
+                            <span className="text-xs">Listening...</span>
+                          </div>
                         )}
-
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleSkipForward(); resetFsTimer(); }}
-                          className="p-2 text-gray-400 hover:text-white transition"
-                        >
-                          <FastForward size={20} />
-                        </button>
                       </div>
+                    </div>
 
-                      {/* Divider */}
-                      <div className="w-px h-8 bg-gray-700 mx-1 hidden sm:block"></div>
+                    {/* BOTTOM-CENTER: Main Controls */}
+                    <div className={`absolute bottom-4 left-0 right-0 z-20 flex flex-col items-center gap-2 px-2 transition-all duration-300 ${showFsControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
 
-                      {/* Loop Controls (Right) */}
-                      <div className="flex flex-col sm:flex-row items-center gap-2">
-                        {/* Standard Loop */}
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleAddRegion(); resetFsTimer(); }}
-                            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 border border-indigo-500 hover:bg-indigo-500 rounded-xl text-white text-xs font-bold transition shadow-md"
-                            title="Set Loop"
-                          >
-                            <Flag size={14} />
-                            <span>Loop</span>
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleClearRegions(); resetFsTimer(); }}
-                            className="p-2 bg-gray-800/80 hover:bg-red-900/80 rounded-xl border border-gray-700/50 hover:border-red-500/50 text-gray-400 hover:text-red-300 transition"
-                            title="Clear Loops"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
+                      {/* Main Actions Row â€” scrollable on small screens */}
+                      <div className="w-full max-w-full overflow-x-auto hidden-scrollbar">
+                        <div className="flex items-center gap-2 bg-gray-900/90 backdrop-blur-xl px-3 py-2 rounded-2xl border border-gray-700/50 shadow-2xl w-max mx-auto">
 
-                        {/* Sequence Loop */}
-                        <div className="flex flex-col sm:border-l border-gray-700 sm:pl-2 gap-2">
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleAddSequenceLoop(); resetFsTimer(); }}
-                              className="flex items-center gap-1 px-3 py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-white text-xs font-bold transition shadow-md"
-                              title="Save current loop to sequence"
-                            >
-                              <PlusSquare size={14} />
-                              <span>Save({sequenceLoops.length})</span>
-                            </button>
-
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setIsSequenceLoopOnlyOnce(!isSequenceLoopOnlyOnce); resetFsTimer(); }}
-                              className={`p-2 rounded-xl border transition ${!isSequenceLoopOnlyOnce ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : 'bg-gray-800 border-gray-700 text-gray-500 hover:bg-gray-700'}`}
-                              title={isSequenceLoopOnlyOnce ? "Play Once (Click to Loop)" : "Loop Infinitely (Click to Play Once)"}
-                            >
-                              {!isSequenceLoopOnlyOnce ? <Repeat size={14} /> : <Repeat1 size={14} />}
-                            </button>
-
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handlePlaySequence(); resetFsTimer(); }}
-                              disabled={sequenceLoops.length === 0}
-                              className={`flex items-center gap-1 px-3 py-2 rounded-xl text-white text-xs font-bold transition shadow-md ${sequenceLoops.length > 0
-                                ? (isSequencePlaying ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'bg-emerald-600 hover:bg-emerald-500')
-                                : 'bg-gray-700 text-gray-500 opacity-50 cursor-not-allowed'
-                                }`}
-                              title="Play Sequence"
-                            >
-                              <PlaySquare size={14} />
-                              <span className="hidden sm:inline">Play</span>
-                            </button>
-
-                            {sequenceLoops.length > 0 && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleClearSequence(); resetFsTimer(); }}
-                                className="p-2 bg-gray-800/80 hover:bg-red-900/80 rounded-xl border border-gray-700/50 hover:border-red-500/50 text-gray-400 hover:text-red-300 transition"
-                                title="Clear Sequence"
-                              >
-                                <XSquare size={16} />
-                              </button>
+                          {/* Compact Current Note (replaces speed buttons) */}
+                          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border min-w-[70px] justify-center ${currentNote ? display.colors.base : 'bg-gray-800/80 border-gray-700/50'
+                            }`}>
+                            {currentNote ? (
+                              <>
+                                <span className={`text-lg font-black ${display.colors.text}`}>{display.main}</span>
+                                <span className={`text-[10px] ${display.colors.subText}`}>{display.sub}</span>
+                              </>
+                            ) : (
+                              <span className="text-xs text-gray-500 font-bold">{playbackRate}x</span>
                             )}
                           </div>
 
-                          {/* Sequence Reorder UI Fullscreen */}
-                          {sequenceLoops.length > 0 && (
-                            <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-[250px] sm:max-w-xs hidden-scrollbar pt-1">
-                              {sequenceLoops.map((loop, idx) => (
-                                <div key={idx} className="flex flex-col items-center min-w-max bg-gray-900/80 rounded border border-gray-700 p-1 gap-1">
-                                  <div className="flex items-center justify-between w-full px-1">
-                                    <span className="text-[10px] text-amber-500 font-bold">Seq {idx + 1}</span>
-                                    <button onClick={(e) => { e.stopPropagation(); handleRemoveSequenceItem(idx); resetFsTimer(); }} className="text-gray-500 hover:text-red-400 p-0.5">
-                                      <XSquare size={12} />
-                                    </button>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleReorderSequence(idx, idx - 1); resetFsTimer(); }}
-                                      disabled={idx === 0}
-                                      className="p-1 bg-gray-800 rounded hover:bg-amber-600 hover:text-white disabled:opacity-30 transition"
-                                    >
-                                      <ArrowLeft size={10} />
-                                    </button>
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); handleReorderSequence(idx, idx + 1); resetFsTimer(); }}
-                                      disabled={idx === sequenceLoops.length - 1}
-                                      className="p-1 bg-gray-800 rounded hover:bg-amber-600 hover:text-white disabled:opacity-30 transition"
-                                    >
-                                      <ArrowRight size={10} />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
+                          {/* Playback Controls (Moved to Middle) */}
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleSkipBackward(); resetFsTimer(); }}
+                              className="p-2 text-gray-400 hover:text-white transition"
+                            >
+                              <Rewind size={20} />
+                            </button>
+
+                            <button
+                              onClick={(e) => { e.stopPropagation(); togglePlay(); resetFsTimer(); }}
+                              className={`p-4 rounded-full transition shadow-lg ${isPlaying ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}
+                            >
+                              {isPlaying ? <Pause size={24} fill="white" /> : <Play size={24} fill="white" className="ml-0.5" />}
+                            </button>
+
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleRecordToggle(); resetFsTimer(); }}
+                              className={`p-3 rounded-full transition ${isRecording ? 'bg-red-600 animate-pulse ring-4 ring-red-500/30' : 'bg-gray-700 hover:bg-gray-600 text-white'}`}
+                            >
+                              <Mic2 size={20} />
+                            </button>
+
+                            {/* Play My Recording */}
+                            {userAudioUrl && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handlePlayRecording(); resetFsTimer(); }}
+                                className="p-3 bg-orange-600 hover:bg-orange-700 rounded-full transition text-white shadow-lg"
+                                title="Play My Recording"
+                              >
+                                <PlayCircle size={20} />
+                              </button>
+                            )}
+
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleSkipForward(); resetFsTimer(); }}
+                              className="p-2 text-gray-400 hover:text-white transition"
+                            >
+                              <FastForward size={20} />
+                            </button>
+                          </div>
+
+                          {/* Divider */}
+                          <div className="w-px h-8 bg-gray-700 mx-1 hidden sm:block"></div>
+
+                          {/* Loop Controls (Right) */}
+                          <div className="flex flex-col sm:flex-row items-center gap-2">
+                            {/* Standard Loop */}
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleAddRegion(); resetFsTimer(); }}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 border border-indigo-500 hover:bg-indigo-500 rounded-xl text-white text-xs font-bold transition shadow-md"
+                                title="Set Loop"
+                              >
+                                <Flag size={14} />
+                                <span>Loop</span>
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleClearRegions(); resetFsTimer(); }}
+                                className="p-2 bg-gray-800/80 hover:bg-red-900/80 rounded-xl border border-gray-700/50 hover:border-red-500/50 text-gray-400 hover:text-red-300 transition"
+                                title="Clear Loops"
+                              >
+                                <Trash2 size={16} />
+                              </button>
                             </div>
-                          )}
+
+                            {/* Sequence Loop */}
+                            <div className="flex flex-col sm:border-l border-gray-700 sm:pl-2 gap-2">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleAddSequenceLoop(); resetFsTimer(); }}
+                                  className="flex items-center gap-1 px-3 py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-white text-xs font-bold transition shadow-md"
+                                  title="Save current loop to sequence"
+                                >
+                                  <PlusSquare size={14} />
+                                  <span>Save({sequenceLoops.length})</span>
+                                </button>
+
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setIsSequenceLoopOnlyOnce(!isSequenceLoopOnlyOnce); resetFsTimer(); }}
+                                  className={`p-2 rounded-xl border transition ${!isSequenceLoopOnlyOnce ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : 'bg-gray-800 border-gray-700 text-gray-500 hover:bg-gray-700'}`}
+                                  title={isSequenceLoopOnlyOnce ? "Play Once (Click to Loop)" : "Loop Infinitely (Click to Play Once)"}
+                                >
+                                  {!isSequenceLoopOnlyOnce ? <Repeat size={14} /> : <Repeat1 size={14} />}
+                                </button>
+
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handlePlaySequence(); resetFsTimer(); }}
+                                  disabled={sequenceLoops.length === 0}
+                                  className={`flex items-center gap-1 px-3 py-2 rounded-xl text-white text-xs font-bold transition shadow-md ${sequenceLoops.length > 0
+                                    ? (isSequencePlaying ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' : 'bg-emerald-600 hover:bg-emerald-500')
+                                    : 'bg-gray-700 text-gray-500 opacity-50 cursor-not-allowed'
+                                    }`}
+                                  title="Play Sequence"
+                                >
+                                  <PlaySquare size={14} />
+                                  <span className="hidden sm:inline">Play</span>
+                                </button>
+
+                                {sequenceLoops.length > 0 && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleClearSequence(); resetFsTimer(); }}
+                                    className="p-2 bg-gray-800/80 hover:bg-red-900/80 rounded-xl border border-gray-700/50 hover:border-red-500/50 text-gray-400 hover:text-red-300 transition"
+                                    title="Clear Sequence"
+                                  >
+                                    <XSquare size={16} />
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Sequence Reorder UI Fullscreen */}
+                              {sequenceLoops.length > 0 && (
+                                <div className="flex items-center gap-1 overflow-x-auto pb-1 max-w-[200px] hidden-scrollbar pt-1">
+                                  {sequenceLoops.map((loop, idx) => (
+                                    <div key={idx} className="flex items-center gap-1 min-w-max bg-gray-900/80 rounded border border-gray-700 px-1.5 py-1">
+                                      <span className="text-[9px] text-amber-500 font-bold">S{idx + 1}</span>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleReorderSequence(idx, idx - 1); resetFsTimer(); }}
+                                        disabled={idx === 0}
+                                        className="p-0.5 bg-gray-800 rounded hover:bg-amber-600 hover:text-white disabled:opacity-30 transition text-gray-400"
+                                      >
+                                        <ArrowLeft size={8} />
+                                      </button>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); handleReorderSequence(idx, idx + 1); resetFsTimer(); }}
+                                        disabled={idx === sequenceLoops.length - 1}
+                                        className="p-0.5 bg-gray-800 rounded hover:bg-amber-600 hover:text-white disabled:opacity-30 transition text-gray-400"
+                                      >
+                                        <ArrowRight size={8} />
+                                      </button>
+                                      <button onClick={(e) => { e.stopPropagation(); handleRemoveSequenceItem(idx); resetFsTimer(); }} className="text-gray-500 hover:text-red-400 p-0.5">
+                                        <XSquare size={8} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                </>
+                  </>
               )}
 
-              {/* Non-fullscreen Controls */}
-              {!isFullscreen && (
-                <Controls
-                  isPlaying={isPlaying}
-                  onTogglePlay={togglePlay}
-                  playbackRate={playbackRate}
-                  onPlaybackRateChange={setPlaybackRate}
-                  onAddRegion={handleAddRegion}
-                  onClearRegions={handleClearRegions}
-                  zoom={zoom}
-                  onZoomChange={setZoom}
-                  onSkipBackward={handleSkipBackward}
-                  onSkipForward={handleSkipForward}
-                  isRecording={isRecording}
-                  onRecordToggle={handleRecordToggle}
-                  userAudioUrl={userAudioUrl}
-                  onPlayRecording={handlePlayRecording}
-                  sequenceLoops={sequenceLoops}
-                  onAddSequenceLoop={handleAddSequenceLoop}
-                  onPlaySequence={handlePlaySequence}
-                  isSequencePlaying={isSequencePlaying}
-                  onClearSequence={handleClearSequence}
-                  isSequenceLoopOnlyOnce={isSequenceLoopOnlyOnce}
-                  setIsSequenceLoopOnlyOnce={setIsSequenceLoopOnlyOnce}
-                  onRemoveSequenceItem={handleRemoveSequenceItem}
-                  onReorderSequence={handleReorderSequence}
-                />
-              )}
-            </div> {/* End Fullscreen Container */}
-          </div>
+                  {/* Non-fullscreen Controls */}
+                  {!isFullscreen && (
+                    <Controls
+                      isPlaying={isPlaying}
+                      onTogglePlay={togglePlay}
+                      playbackRate={playbackRate}
+                      onPlaybackRateChange={setPlaybackRate}
+                      onAddRegion={handleAddRegion}
+                      onClearRegions={handleClearRegions}
+                      zoom={zoom}
+                      onZoomChange={setZoom}
+                      onSkipBackward={handleSkipBackward}
+                      onSkipForward={handleSkipForward}
+                      isRecording={isRecording}
+                      onRecordToggle={handleRecordToggle}
+                      userAudioUrl={userAudioUrl}
+                      onPlayRecording={handlePlayRecording}
+                      sequenceLoops={sequenceLoops}
+                      onAddSequenceLoop={handleAddSequenceLoop}
+                      onPlaySequence={handlePlaySequence}
+                      isSequencePlaying={isSequencePlaying}
+                      onClearSequence={handleClearSequence}
+                      isSequenceLoopOnlyOnce={isSequenceLoopOnlyOnce}
+                      setIsSequenceLoopOnlyOnce={setIsSequenceLoopOnlyOnce}
+                      onRemoveSequenceItem={handleRemoveSequenceItem}
+                      onReorderSequence={handleReorderSequence}
+                    />
+                  )}
+                </div> {/* End Fullscreen Container */}
+            </div>
         )}
 
-      </main>
+          </main>
 
       {/* Footer Instructions */}
-      {audioFile && (
-        <div className="max-w-6xl mx-auto px-8 pb-12 opacity-50 text-xs text-center">
-          <p className="text-gray-500">
-            Space: Play/Pause | Arrows: Seek | L: Loop | C: Clear
-          </p>
-        </div>
-      )}
-      {showPitchGuide && (
-        <PitchReferenceGuide
-          onClose={() => setShowPitchGuide(false)}
-          showSargam={showSargam}
-          rootKey={rootKey}
-        />
-      )}
+        {audioFile && (
+          <div className="max-w-6xl mx-auto px-8 pb-12 opacity-50 text-xs text-center">
+            <p className="text-gray-500">
+              Space: Play/Pause | Arrows: Seek | L: Loop | C: Clear
+            </p>
+          </div>
+        )}
+        {showPitchGuide && (
+          <PitchReferenceGuide
+            onClose={() => setShowPitchGuide(false)}
+            showSargam={showSargam}
+            rootKey={rootKey}
+          />
+        )}
     </div>
   );
 }
