@@ -627,12 +627,9 @@ const AudioPlayer = forwardRef(({
             wsRegions.on('region-out', (region) => {
                 if (region.id === 'active-loop') {
                     region.play(); // Standard loop traps the playhead
-                } else if (region.id.startsWith('seq-')) {
-                    // Sequence loops only trigger callback to allow traversal if playing
-                    if (onSequenceLoopEndRef.current) {
-                        onSequenceLoopEndRef.current();
-                    }
                 }
+                // seq- regions: do NOT handle here — timeupdate boundary enforcement
+                // handles the sequence transitions. Having both caused double-fire.
             });
 
             if (typeof audioFile === 'string') {
