@@ -171,33 +171,26 @@ const SargamPractice = ({ onClose }) => {
 
             const W = rect.width;
             const H = rect.height;
-            const LABEL_W = 50; // Y-axis label width
+            const LABEL_W = 50;
             const GRAPH_W = W - LABEL_W;
             const TOP_PAD = 10;
-            const BOT_PAD = 30;
+            const BOT_PAD = 20;
             const GRAPH_H = H - TOP_PAD - BOT_PAD;
 
             const elapsed = (performance.now() - startTimeRef.current) / 1000;
-            // Loop the exercise
             const loopedTime = elapsed % totalDuration;
 
-            // How many seconds visible on screen
-            const VISIBLE_SECS = 15;
-
             // Y-axis: map interval to pixel Y
-            // scaleSwars goes from interval 0 (Sa) to interval 12 (upper Sa)
             const minInterval = 0;
             const maxInterval = 12;
             const intervalToY = (interval) => {
                 const fraction = (interval - minInterval) / (maxInterval - minInterval);
-                return TOP_PAD + GRAPH_H - fraction * GRAPH_H; // higher interval = higher on screen
+                return TOP_PAD + GRAPH_H - fraction * GRAPH_H;
             };
 
-            // X-axis: time to pixel X
-            // Current time is at right edge, past scrolls left
-            const timeToX = (t) => {
-                return LABEL_W + GRAPH_W - (loopedTime - t) * (GRAPH_W / VISIBLE_SECS);
-            };
+            // X-axis: STATIC — all bars fill the full width
+            // Time 0 = left edge (LABEL_W), totalDuration = right edge (W)
+            const timeToX = (t) => LABEL_W + (t / totalDuration) * GRAPH_W;
 
             // Clear
             ctx.fillStyle = '#0a0a0f';
@@ -208,21 +201,19 @@ const SargamPractice = ({ onClose }) => {
             ctx.textBaseline = 'middle';
             for (const swar of scaleSwars) {
                 const y = intervalToY(swar.interval);
-                // Grid line
-                ctx.strokeStyle = 'rgba(99, 102, 241, 0.15)';
+                ctx.strokeStyle = 'rgba(99, 102, 241, 0.12)';
                 ctx.lineWidth = 1;
                 ctx.beginPath();
                 ctx.moveTo(LABEL_W, y);
                 ctx.lineTo(W, y);
                 ctx.stroke();
-                // Label
                 ctx.fillStyle = '#a5b4fc';
                 ctx.font = 'bold 11px Inter, system-ui, sans-serif';
                 ctx.fillText(swar.name, LABEL_W - 6, y);
             }
 
-            // Draw target boxes
-            const boxHeight = GRAPH_H / (scaleSwars.length); // height per swara zone
+            // Draw ALL target boxes (static, always visible)
+            const boxHeight = GRAPH_H / (scaleSwars.length);
 
             for (let i = 0; i < exercisePattern.length; i++) {
                 const targetInterval = exercisePattern[i];
@@ -231,49 +222,47 @@ const SargamPractice = ({ onClose }) => {
 
                 const x1 = timeToX(boxStartTime);
                 const x2 = timeToX(boxEndTime);
-
-                // Only draw if visible
-                if (x2 < LABEL_W || x1 > W) continue;
-
                 const centerY = intervalToY(targetInterval);
                 const halfBox = boxHeight * 0.45;
 
-                // Is this the current target?
                 const isCurrent = loopedTime >= boxStartTime && loopedTime < boxEndTime;
+                const isPast = loopedTime >= boxEndTime;
 
-                // Check if user was in zone during this box
-                const relevantPitch = currentPitch;
+                // Check if user is in zone
                 let isInZone = false;
-                if (isCurrent && relevantPitch) {
-                    const diff = Math.abs(relevantPitch.interval - targetInterval);
-                    isInZone = diff < 0.8; // within ~80 cents
+                if (isCurrent && currentPitch) {
+                    isInZone = Math.abs(currentPitch.interval - targetInterval) < 0.8;
                 }
 
-                // Box color
+                // Box colors
                 if (isCurrent) {
                     ctx.fillStyle = isInZone ? 'rgba(16, 185, 129, 0.35)' : 'rgba(245, 158, 11, 0.25)';
                     ctx.strokeStyle = isInZone ? 'rgba(16, 185, 129, 0.8)' : 'rgba(245, 158, 11, 0.6)';
+                    ctx.lineWidth = 2.5;
+                } else if (isPast) {
+                    ctx.fillStyle = 'rgba(79, 70, 229, 0.06)';
+                    ctx.strokeStyle = 'rgba(79, 70, 229, 0.15)';
+                    ctx.lineWidth = 1;
                 } else {
                     ctx.fillStyle = 'rgba(79, 70, 229, 0.12)';
                     ctx.strokeStyle = 'rgba(79, 70, 229, 0.3)';
+                    ctx.lineWidth = 1;
                 }
 
-                const drawX = Math.max(LABEL_W, x1);
-                const drawW = Math.min(W, x2) - drawX;
-                ctx.fillRect(drawX, centerY - halfBox, drawW, halfBox * 2);
-                ctx.lineWidth = isCurrent ? 2 : 1;
-                ctx.strokeRect(drawX, centerY - halfBox, drawW, halfBox * 2);
+                ctx.fillRect(x1, centerY - halfBox, x2 - x1, halfBox * 2);
+                ctx.strokeRect(x1, centerY - halfBox, x2 - x1, halfBox * 2);
 
                 // Swara label inside box
-                if (drawW > 20) {
-                    ctx.fillStyle = isCurrent ? (isInZone ? '#34d399' : '#fbbf24') : '#6366f1';
-                    ctx.font = `bold ${isCurrent ? 14 : 11}px Inter, system-ui, sans-serif`;
+                const boxW = x2 - x1;
+                if (boxW > 15) {
+                    ctx.fillStyle = isCurrent ? (isInZone ? '#34d399' : '#fbbf24') : (isPast ? '#4338ca40' : '#6366f1');
+                    ctx.font = `bold ${isCurrent ? 13 : 10}px Inter, system-ui, sans-serif`;
                     ctx.textAlign = 'center';
-                    ctx.fillText(SARGAM_ALL[targetInterval % 12] || 'Sa', drawX + drawW / 2, centerY + 1);
+                    ctx.fillText(SARGAM_ALL[targetInterval % 12] || 'Sa', x1 + boxW / 2, centerY + 1);
                 }
             }
 
-            // Draw pitch history (blue line)
+            // Draw pitch history (blue line) — on top of boxes
             const history = pitchHistoryRef.current;
             if (history.length > 1) {
                 ctx.strokeStyle = '#60a5fa';
@@ -285,78 +274,59 @@ const SargamPractice = ({ onClose }) => {
 
                 for (let i = 0; i < history.length; i++) {
                     const pt = history[i];
-                    // Adjust for looping
-                    let drawTime = pt.time % totalDuration;
-                    // Only draw points near current loop
-                    const cycleDiff = Math.abs(drawTime - loopedTime);
-                    if (cycleDiff > VISIBLE_SECS) continue;
-
+                    const drawTime = pt.time % totalDuration;
                     const x = timeToX(drawTime);
                     const y = intervalToY(pt.interval);
 
                     if (x < LABEL_W || x > W) continue;
-
                     if (!started) { ctx.moveTo(x, y); started = true; }
                     else { ctx.lineTo(x, y); }
                 }
                 ctx.stroke();
 
-                // Glow effect
-                ctx.strokeStyle = 'rgba(96, 165, 250, 0.3)';
+                // Glow
+                ctx.strokeStyle = 'rgba(96, 165, 250, 0.25)';
                 ctx.lineWidth = 6;
                 ctx.stroke();
             }
 
-            // Draw current position line (vertical)
-            const nowX = timeToX(loopedTime);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-            ctx.lineWidth = 1;
-            ctx.setLineDash([4, 4]);
-            ctx.beginPath();
-            ctx.moveTo(nowX, TOP_PAD);
-            ctx.lineTo(nowX, H - BOT_PAD);
-            ctx.stroke();
+            // Draw playhead (vertical line at current time)
+            const playheadX = timeToX(loopedTime);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.lineWidth = 2;
             ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(playheadX, TOP_PAD);
+            ctx.lineTo(playheadX, H - BOT_PAD);
+            ctx.stroke();
 
-            // Draw current pitch dot
+            // Current pitch dot on playhead
             if (currentPitch) {
                 const dotY = intervalToY(currentPitch.interval);
                 ctx.beginPath();
-                ctx.arc(nowX, dotY, 6, 0, Math.PI * 2);
+                ctx.arc(playheadX, dotY, 7, 0, Math.PI * 2);
                 ctx.fillStyle = '#60a5fa';
                 ctx.fill();
-                ctx.strokeStyle = '#fff';
+                ctx.strokeStyle = '#ffffff';
                 ctx.lineWidth = 2;
                 ctx.stroke();
             }
 
-            // Time labels at bottom
-            ctx.fillStyle = '#6b7280';
-            ctx.font = '10px monospace';
-            ctx.textAlign = 'center';
-            for (let t = Math.floor(loopedTime - VISIBLE_SECS); t <= Math.ceil(loopedTime + 1); t++) {
-                if (t < 0) continue;
-                const x = timeToX(t);
-                if (x >= LABEL_W && x <= W) {
-                    ctx.fillText(`${t}s`, x, H - 10);
-                }
-            }
+            // Progress bar at very bottom
+            const progress = loopedTime / totalDuration;
+            ctx.fillStyle = 'rgba(79, 70, 229, 0.2)';
+            ctx.fillRect(LABEL_W, H - 4, GRAPH_W, 4);
+            ctx.fillStyle = '#6366f1';
+            ctx.fillRect(LABEL_W, H - 4, GRAPH_W * progress, 4);
 
-            // Current swara indicator text (top right)
+            // Current swara text (top right)
             const currentExIdx = Math.floor(loopedTime / HOLD_DURATION) % exercisePattern.length;
             const currentTarget = exercisePattern[currentExIdx];
             const targetName = SARGAM_ALL[currentTarget % 12] || 'Sa';
             ctx.fillStyle = '#fff';
             ctx.font = 'bold 16px Inter, system-ui, sans-serif';
             ctx.textAlign = 'right';
-            ctx.fillText(`Sing: ${targetName}`, W - 12, TOP_PAD + 20);
-
-            // Progress bar at very bottom
-            const progress = loopedTime / totalDuration;
-            ctx.fillStyle = 'rgba(79, 70, 229, 0.3)';
-            ctx.fillRect(LABEL_W, H - 4, GRAPH_W, 4);
-            ctx.fillStyle = '#6366f1';
-            ctx.fillRect(LABEL_W, H - 4, GRAPH_W * progress, 4);
+            ctx.fillText(`Sing: ${targetName}`, W - 12, TOP_PAD + 18);
 
             animFrameRef.current = requestAnimationFrame(render);
         };
