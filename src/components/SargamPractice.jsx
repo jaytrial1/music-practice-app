@@ -98,8 +98,8 @@ const SargamPractice = ({ onClose }) => {
         let closestSwara;
         let centsOff;
 
-        // Check if on a scale note — wide zone (±45 cents ≈ quarter-tone each side)
-        const ON_NOTE_THRESHOLD = 45; // cents — forgiving zone-based approach
+        // Check if on a scale note — zone-based (±50 cents per ICM shruti standard)
+        const ON_NOTE_THRESHOLD = 50; // cents — matches Indian classical music tolerance
         if (centsFromLower <= ON_NOTE_THRESHOLD) {
             status = 'on-note';
             closestSwara = lowerSwara;
