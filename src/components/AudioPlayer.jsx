@@ -383,16 +383,61 @@ const AudioPlayer = forwardRef(({
         const detectPitch = YIN({ sampleRate: buffer.sampleRate }); // Standard YIN
         const channelData = buffer.getChannelData(0);
         const bufferSize = 2048;
-        const pitches = [];
+        const rawPitches = [];
+        const rmsValues = [];
 
         const timePerFrame = bufferSize / buffer.sampleRate;
 
         for (let i = 0; i < channelData.length; i += bufferSize) {
             const chunk = channelData.slice(i, i + bufferSize);
             const frequency = detectPitch(chunk);
-            pitches.push(frequency);
+            rawPitches.push(frequency);
+
+            // Compute RMS energy for this chunk (for re-articulation detection)
+            let sumSq = 0;
+            for (let j = 0; j < chunk.length; j++) {
+                sumSq += chunk[j] * chunk[j];
+            }
+            rmsValues.push(Math.sqrt(sumSq / chunk.length));
         }
 
+        // --- OCTAVE ERROR CORRECTION ---
+        // Uses a sliding median window: if a frame's frequency is ~2x or ~0.5x
+        // the median of surrounding valid frames, snap it to the correct octave.
+        const pitches = [...rawPitches];
+        const WINDOW = 5; // frames on each side
+        const OCT_LO = 1.85;
+        const OCT_HI = 2.15;
+
+        for (let i = 0; i < pitches.length; i++) {
+            if (!pitches[i] || pitches[i] < 60 || pitches[i] > 1100) continue;
+
+            // Gather valid neighbors (use rawPitches so corrections don't cascade)
+            const neighbors = [];
+            for (let j = Math.max(0, i - WINDOW); j <= Math.min(rawPitches.length - 1, i + WINDOW); j++) {
+                if (j === i) continue;
+                if (rawPitches[j] && rawPitches[j] >= 60 && rawPitches[j] <= 1100) {
+                    neighbors.push(rawPitches[j]);
+                }
+            }
+            if (neighbors.length < 2) continue; // Not enough context
+
+            // Median of neighbors
+            neighbors.sort((a, b) => a - b);
+            const median = neighbors[Math.floor(neighbors.length / 2)];
+
+            const ratio = pitches[i] / median;
+
+            if (ratio >= OCT_LO && ratio <= OCT_HI) {
+                // Current frame is ~2x the median → octave-up error, correct down
+                pitches[i] /= 2;
+            } else if (ratio >= 1 / OCT_HI && ratio <= 1 / OCT_LO) {
+                // Current frame is ~0.5x the median → octave-down error, correct up
+                pitches[i] *= 2;
+            }
+        }
+
+        // Build segments with corrected pitches + RMS energy
         const segments = [];
         for (let i = 0; i < pitches.length; i++) {
             const freq = pitches[i];
@@ -403,7 +448,8 @@ const AudioPlayer = forwardRef(({
             segments.push({
                 startTime: i * timePerFrame,
                 endTime: (i + 1) * timePerFrame,
-                freq: freq
+                freq: freq,
+                rms: rmsValues[i] || 0
             });
         }
         return { pitches, segments };
@@ -708,9 +754,21 @@ const AudioPlayer = forwardRef(({
                 const prev = currentRun[currentRun.length - 1];
                 const prevMidi = getMidi(prev.freq);
                 const currMidi = getMidi(seg.freq);
+                const timeGap = seg.startTime - prev.endTime;
 
-                // If same note and close in time (< 0.1s gap)
-                if (prevMidi === currMidi && (seg.startTime - prev.endTime) < 0.1) {
+                // Check for RMS energy dip (re-articulation detection)
+                // If same note but volume dipped significantly, it's a new attack
+                let energyDip = false;
+                if (prevMidi === currMidi && currentRun.length >= 2 && seg.rms !== undefined) {
+                    const runAvgRms = currentRun.reduce((sum, s) => sum + (s.rms || 0), 0) / currentRun.length;
+                    // A dip below 40% of running average signals a re-articulation
+                    if (runAvgRms > 0 && seg.rms < runAvgRms * 0.4) {
+                        energyDip = true;
+                    }
+                }
+
+                // Merge if: same note, close in time, and no energy dip
+                if (prevMidi === currMidi && timeGap < 0.1 && !energyDip) {
                     currentRun.push(seg);
                 } else {
                     processRun(currentRun);
