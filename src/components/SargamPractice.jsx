@@ -19,123 +19,103 @@ const SCALES = {
     "Chromatic (All 12)": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
 };
 
+// 3 Saptaks for practice (Indian classical vocal range)
+const SAPTAKS = [
+    { name: 'Taar', key: 'taar', color: 'text-purple-400', bg: 'bg-purple-500/10', dotFn: (s) => s + '\u0307' },
+    { name: 'Madhya', key: 'madhya', color: 'text-indigo-400', bg: 'bg-indigo-500/10', dotFn: (s) => s },
+    { name: 'Mandra', key: 'mandra', color: 'text-blue-400', bg: 'bg-blue-500/10', dotFn: (s) => s + '\u0323' },
+];
+
 const SargamPractice = ({ onClose }) => {
-    const [rootKey, setRootKey] = useState("A"); // Sa = A by default
+    const [rootKey, setRootKey] = useState("A");
     const [selectedScale, setSelectedScale] = useState("Asavari (Minor)");
     const [isListening, setIsListening] = useState(false);
-    const [pitchInfo, setPitchInfo] = useState(null); // { frequency, exactMidi, interval, ... }
+    const [pitchInfo, setPitchInfo] = useState(null);
 
     const audioCtxRef = useRef(null);
     const scriptNodeRef = useRef(null);
     const streamRef = useRef(null);
     const isActiveRef = useRef(false);
 
-    // Get the scale intervals for the selected scale
     const scaleIntervals = useMemo(() => SCALES[selectedScale] || SCALES["Bilawal (Major)"], [selectedScale]);
 
-    // Root MIDI (Sa)
     const rootMidi = useMemo(() => {
         const idx = NOTES.indexOf(rootKey);
-        // We use octave 4 as reference, so C4=60, A4=69
-        return 60 + idx; // C=60, C#=61, ... A=69, B=71
+        return 60 + idx;
     }, [rootKey]);
 
-    // Compute pitch analysis from a detected frequency
     const analyzePitch = useCallback((frequency) => {
         if (!frequency || frequency < 50 || frequency > 1200) return null;
 
-        // Exact MIDI (fractional, not rounded)
         const exactMidi = 69 + 12 * Math.log2(frequency / 440);
+        const interval = ((exactMidi - rootMidi) % 12 + 12) % 12;
 
-        // Fractional interval from Sa (0 = Sa, can be fractional)
-        const interval = ((exactMidi - rootMidi) % 12 + 12) % 12; // 0..11.99
+        // --- SAPTAK (Octave) DETECTION ---
+        const semitonesFromRoot = exactMidi - rootMidi;
+        let saptak, saptakLabel, saptakShort;
+        if (semitonesFromRoot < -6) {
+            saptak = 'mandra'; saptakLabel = 'Mandra Saptak'; saptakShort = 'M';
+        } else if (semitonesFromRoot < 6) {
+            saptak = 'madhya'; saptakLabel = 'Madhya Saptak'; saptakShort = 'm';
+        } else if (semitonesFromRoot < 18) {
+            saptak = 'taar'; saptakLabel = 'Taar Saptak'; saptakShort = 'T';
+        } else {
+            saptak = 'ati-taar'; saptakLabel = 'Ati-Taar Saptak'; saptakShort = 'AT';
+        }
 
-        // Find the nearest lower and upper scale swaras
-        let lowerSwara = null;
-        let upperSwara = null;
-        let lowerInterval = -1;
-        let upperInterval = 13;
+        let lowerSwara = null, upperSwara = null;
+        let lowerInterval = -1, upperInterval = 13;
 
         for (const si of scaleIntervals) {
-            if (si <= interval) {
-                if (si > lowerInterval) {
-                    lowerInterval = si;
-                    lowerSwara = SARGAM_ALL[si];
-                }
-            }
-            if (si >= interval) {
-                if (si < upperInterval) {
-                    upperInterval = si;
-                    upperSwara = SARGAM_ALL[si];
-                }
-            }
+            if (si <= interval && si > lowerInterval) { lowerInterval = si; lowerSwara = SARGAM_ALL[si]; }
+            if (si >= interval && si < upperInterval) { upperInterval = si; upperSwara = SARGAM_ALL[si]; }
         }
 
-        // Handle wrap-around (if interval is above the highest scale note)
-        if (lowerSwara === null) {
-            lowerInterval = scaleIntervals[scaleIntervals.length - 1];
-            lowerSwara = SARGAM_ALL[lowerInterval];
-        }
-        if (upperSwara === null) {
-            upperInterval = scaleIntervals[0] + 12;
-            upperSwara = SARGAM_ALL[scaleIntervals[0]];
-        }
+        if (lowerSwara === null) { lowerInterval = scaleIntervals[scaleIntervals.length - 1]; lowerSwara = SARGAM_ALL[lowerInterval]; }
+        if (upperSwara === null) { upperInterval = scaleIntervals[0] + 12; upperSwara = SARGAM_ALL[scaleIntervals[0]]; }
 
-        // Distance in semitones
         const distFromLower = interval - lowerInterval;
         const distToUpper = upperInterval - interval;
         const spanWidth = upperInterval - lowerInterval;
-
-        // Convert to cents (100 cents = 1 semitone)
         const centsFromLower = distFromLower * 100;
         const centsToUpper = distToUpper * 100;
-
-        // Position between the two swaras (0 = on lower, 1 = on upper)
         const position = spanWidth > 0 ? distFromLower / spanWidth : 0;
 
-        // Determine status
-        let status; // 'on-note', 'between', 'off-scale'
-        let closestSwara;
-        let centsOff;
+        let status, closestSwara, centsOff;
+        const ON_NOTE_THRESHOLD = 50;
 
-        // Check if on a scale note — zone-based (±50 cents per ICM shruti standard)
-        const ON_NOTE_THRESHOLD = 50; // cents — matches Indian classical music tolerance
         if (centsFromLower <= ON_NOTE_THRESHOLD) {
-            status = 'on-note';
-            closestSwara = lowerSwara;
-            centsOff = Math.round(centsFromLower);
+            status = 'on-note'; closestSwara = lowerSwara; centsOff = Math.round(centsFromLower);
         } else if (centsToUpper <= ON_NOTE_THRESHOLD) {
-            status = 'on-note';
-            closestSwara = upperSwara;
-            centsOff = -Math.round(centsToUpper);
+            status = 'on-note'; closestSwara = upperSwara; centsOff = -Math.round(centsToUpper);
         } else {
-            // Check if the current pitch is on a semitone NOT in the scale
             const nearestSemitone = Math.round(interval);
             const isInScale = scaleIntervals.includes(nearestSemitone % 12);
             if (!isInScale && Math.abs(interval - nearestSemitone) < 0.3) {
                 status = 'off-scale';
-                closestSwara = centsFromLower < centsToUpper ? lowerSwara : upperSwara;
-                centsOff = centsFromLower < centsToUpper ? Math.round(centsFromLower) : -Math.round(centsToUpper);
             } else {
                 status = 'between';
-                closestSwara = centsFromLower < centsToUpper ? lowerSwara : upperSwara;
-                centsOff = centsFromLower < centsToUpper ? Math.round(centsFromLower) : -Math.round(centsToUpper);
             }
+            closestSwara = centsFromLower < centsToUpper ? lowerSwara : upperSwara;
+            centsOff = centsFromLower < centsToUpper ? Math.round(centsFromLower) : -Math.round(centsToUpper);
         }
 
+        const addSaptakDot = (swar, saptakName) => {
+            if (saptakName === 'mandra') return swar + '\u0323';
+            if (saptakName === 'taar') return swar + '\u0307';
+            if (saptakName === 'ati-taar') return swar + '\u0308';
+            return swar;
+        };
+
         return {
-            frequency,
-            exactMidi,
-            interval,
-            lowerSwara,
-            upperSwara,
-            lowerInterval,
-            upperInterval,
+            frequency, exactMidi, interval,
+            saptak, saptakLabel, saptakShort,
+            lowerSwara, upperSwara, lowerInterval, upperInterval,
             position,
             centsFromLower: Math.round(centsFromLower),
             centsToUpper: Math.round(centsToUpper),
-            status,
-            closestSwara,
+            status, closestSwara,
+            closestSwaraDisplay: addSaptakDot(closestSwara, saptak),
             centsOff,
         };
     }, [rootMidi, scaleIntervals]);
@@ -143,21 +123,10 @@ const SargamPractice = ({ onClose }) => {
     // Start/stop mic
     useEffect(() => {
         if (!isListening) {
-            // Cleanup
             isActiveRef.current = false;
-            if (scriptNodeRef.current) {
-                scriptNodeRef.current.disconnect();
-                scriptNodeRef.current.onaudioprocess = null;
-                scriptNodeRef.current = null;
-            }
-            if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
-                audioCtxRef.current.close();
-                audioCtxRef.current = null;
-            }
-            if (streamRef.current) {
-                streamRef.current.getTracks().forEach(t => t.stop());
-                streamRef.current = null;
-            }
+            if (scriptNodeRef.current) { scriptNodeRef.current.disconnect(); scriptNodeRef.current.onaudioprocess = null; scriptNodeRef.current = null; }
+            if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') { audioCtxRef.current.close(); audioCtxRef.current = null; }
+            if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
             setPitchInfo(null);
             return;
         }
@@ -167,52 +136,33 @@ const SargamPractice = ({ onClose }) => {
         const startMic = async () => {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        echoCancellation: false,
-                        noiseSuppression: false,
-                        autoGainControl: false,
-                    }
+                    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
                 });
-
-                if (!isActiveRef.current) {
-                    stream.getTracks().forEach(t => t.stop());
-                    return;
-                }
+                if (!isActiveRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
 
                 streamRef.current = stream;
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 audioCtxRef.current = audioCtx;
                 const source = audioCtx.createMediaStreamSource(stream);
 
-                // Gain boost for sensitivity
                 const gainNode = audioCtx.createGain();
                 gainNode.gain.value = 5;
                 source.connect(gainNode);
 
                 const scriptNode = audioCtx.createScriptProcessor(2048, 1, 1);
                 scriptNodeRef.current = scriptNode;
-
-                const detectPitch = YIN({
-                    sampleRate: audioCtx.sampleRate,
-                    threshold: 0.15,
-                    probabilityThreshold: 0.05,
-                });
+                const detectPitch = YIN({ sampleRate: audioCtx.sampleRate, threshold: 0.15, probabilityThreshold: 0.05 });
 
                 gainNode.connect(scriptNode);
                 scriptNode.connect(audioCtx.destination);
 
-                // Smoothing: keep last 3 readings for stability
                 let recentFreqs = [];
 
                 scriptNode.onaudioprocess = (e) => {
                     if (!isActiveRef.current) return;
                     const inputBuffer = e.inputBuffer.getChannelData(0);
-
-                    // Noise gate
                     let rms = 0;
-                    for (let i = 0; i < inputBuffer.length; i++) {
-                        rms += inputBuffer[i] * inputBuffer[i];
-                    }
+                    for (let i = 0; i < inputBuffer.length; i++) rms += inputBuffer[i] * inputBuffer[i];
                     rms = Math.sqrt(rms / inputBuffer.length);
 
                     if (rms > 0.01) {
@@ -220,20 +170,11 @@ const SargamPractice = ({ onClose }) => {
                         if (frequency && frequency > 50 && frequency < 1200) {
                             recentFreqs.push(frequency);
                             if (recentFreqs.length > 3) recentFreqs.shift();
-
-                            // Use median for stability
                             const sorted = [...recentFreqs].sort((a, b) => a - b);
                             const median = sorted[Math.floor(sorted.length / 2)];
-
                             setPitchInfo(analyzePitch(median));
-                        } else {
-                            recentFreqs = [];
-                            setPitchInfo(null);
-                        }
-                    } else {
-                        recentFreqs = [];
-                        setPitchInfo(null);
-                    }
+                        } else { recentFreqs = []; setPitchInfo(null); }
+                    } else { recentFreqs = []; setPitchInfo(null); }
                 };
             } catch (err) {
                 console.error("Failed to start mic for Sargam Practice:", err);
@@ -242,13 +183,9 @@ const SargamPractice = ({ onClose }) => {
         };
 
         startMic();
-
-        return () => {
-            isActiveRef.current = false;
-        };
+        return () => { isActiveRef.current = false; };
     }, [isListening, analyzePitch]);
 
-    // Get color based on status
     const getStatusColor = (status) => {
         switch (status) {
             case 'on-note': return { bg: 'from-emerald-500/30 to-emerald-600/10', border: 'border-emerald-500/60', text: 'text-emerald-400', glow: 'shadow-emerald-500/30' };
@@ -268,48 +205,31 @@ const SargamPractice = ({ onClose }) => {
                     <Music2 size={20} className="text-indigo-400" />
                     <span className="text-sm font-bold text-white tracking-wide">Sargam Practice</span>
                 </div>
-
                 <div className="flex items-center gap-2">
-                    {/* Root Key Selector */}
                     <div className="relative">
-                        <select
-                            value={rootKey}
-                            onChange={(e) => setRootKey(e.target.value)}
-                            className="appearance-none bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs font-bold text-white cursor-pointer focus:outline-none focus:border-indigo-500 pr-7"
-                        >
+                        <select value={rootKey} onChange={(e) => setRootKey(e.target.value)}
+                            className="appearance-none bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs font-bold text-white cursor-pointer focus:outline-none focus:border-indigo-500 pr-7">
                             {NOTES.map(n => <option key={n} value={n}>Sa = {n}</option>)}
                         </select>
                         <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400" />
                     </div>
-
-                    {/* Scale Selector */}
                     <div className="relative">
-                        <select
-                            value={selectedScale}
-                            onChange={(e) => setSelectedScale(e.target.value)}
-                            className="appearance-none bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs font-bold text-white cursor-pointer focus:outline-none focus:border-indigo-500 pr-7"
-                        >
+                        <select value={selectedScale} onChange={(e) => setSelectedScale(e.target.value)}
+                            className="appearance-none bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs font-bold text-white cursor-pointer focus:outline-none focus:border-indigo-500 pr-7">
                             {Object.keys(SCALES).map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                         <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400" />
                     </div>
-
-                    {/* Close */}
-                    <button
-                        onClick={onClose}
-                        className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition"
-                    >
+                    <button onClick={onClose} className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition">
                         <X size={18} />
                     </button>
                 </div>
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col items-center justify-center gap-6 px-4">
-
+            <div className="flex-1 flex flex-col items-center justify-center gap-5 px-4">
                 {/* Central Gauge */}
-                <div className={`relative w-64 h-64 sm:w-80 sm:h-80 rounded-full border-4 ${statusColors.border} bg-gradient-to-br ${statusColors.bg} backdrop-blur-md shadow-2xl ${statusColors.glow} flex flex-col items-center justify-center transition-all duration-300`}>
-
+                <div className={`relative w-60 h-60 sm:w-72 sm:h-72 rounded-full border-4 ${statusColors.border} bg-gradient-to-br ${statusColors.bg} backdrop-blur-md shadow-2xl ${statusColors.glow} flex flex-col items-center justify-center transition-all duration-300`}>
                     {!isListening ? (
                         <div className="flex flex-col items-center gap-3 text-gray-500">
                             <MicOff size={48} />
@@ -323,84 +243,90 @@ const SargamPractice = ({ onClose }) => {
                         </div>
                     ) : (
                         <>
-                            {/* Status label */}
-                            <div className={`absolute top-6 text-[10px] font-bold uppercase tracking-widest ${statusColors.text}`}>
-                                {pitchInfo.status === 'on-note' && '✓ On Note'}
+                            {/* Status */}
+                            <div className={`absolute top-4 text-[10px] font-bold uppercase tracking-widest ${statusColors.text}`}>
+                                {pitchInfo.status === 'on-note' && '✓ In Zone'}
                                 {pitchInfo.status === 'between' && '↔ Between'}
                                 {pitchInfo.status === 'off-scale' && '✗ Off Scale'}
                             </div>
 
-                            {/* Main swara name */}
-                            <div className={`text-6xl sm:text-7xl font-black tracking-tight ${statusColors.text} drop-shadow-lg`}>
-                                {pitchInfo.status === 'on-note' ? pitchInfo.closestSwara : pitchInfo.closestSwara}
+                            {/* Saptak badge */}
+                            <div className={`text-[10px] font-bold uppercase tracking-wider mt-1 px-2.5 py-0.5 rounded-full ${pitchInfo.saptak === 'mandra' ? 'bg-blue-500/20 text-blue-400' :
+                                    pitchInfo.saptak === 'madhya' ? 'bg-indigo-500/20 text-indigo-400' :
+                                        pitchInfo.saptak === 'taar' ? 'bg-purple-500/20 text-purple-400' :
+                                            'bg-pink-500/20 text-pink-400'
+                                }`}>
+                                {pitchInfo.saptakLabel}
                             </div>
 
-                            {/* Zone indicator — friendly, not exact */}
-                            <div className={`text-sm font-bold mt-1 ${pitchInfo.status === 'on-note' ? 'text-emerald-400' : 'text-gray-400'}`}>
+                            {/* Swara name with octave dot */}
+                            <div className={`text-5xl sm:text-6xl font-black tracking-tight ${statusColors.text} drop-shadow-lg`}>
+                                {pitchInfo.closestSwaraDisplay}
+                            </div>
+
+                            {/* Zone / Hz */}
+                            <div className={`text-sm font-bold mt-0.5 ${pitchInfo.status === 'on-note' ? 'text-emerald-400' : 'text-gray-400'}`}>
                                 {pitchInfo.status === 'on-note' ? '● In Zone' : `${Math.round(pitchInfo.frequency)} Hz`}
                             </div>
 
-                            {/* Between indicator */}
+                            {/* Between bar */}
                             {pitchInfo.status === 'between' && (
-                                <div className="flex items-center gap-2 mt-2">
-                                    <span className="text-sm font-bold text-gray-300">{pitchInfo.lowerSwara}</span>
-                                    <div className="w-24 h-2 bg-gray-800 rounded-full relative overflow-hidden">
-                                        <div
-                                            className="absolute top-0 left-0 h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all duration-100"
-                                            style={{ width: `${Math.min(100, pitchInfo.position * 100)}%` }}
-                                        />
+                                <div className="flex items-center gap-2 mt-1.5">
+                                    <span className="text-xs font-bold text-gray-300">{pitchInfo.lowerSwara}</span>
+                                    <div className="w-20 h-1.5 bg-gray-800 rounded-full relative overflow-hidden">
+                                        <div className="absolute top-0 left-0 h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all duration-100"
+                                            style={{ width: `${Math.min(100, pitchInfo.position * 100)}%` }} />
                                     </div>
-                                    <span className="text-sm font-bold text-gray-300">{pitchInfo.upperSwara}</span>
+                                    <span className="text-xs font-bold text-gray-300">{pitchInfo.upperSwara}</span>
                                 </div>
                             )}
 
                             {/* Frequency */}
-                            <div className="absolute bottom-6 text-xs text-gray-500 font-mono">
+                            <div className="absolute bottom-4 text-[10px] text-gray-500 font-mono">
                                 {Math.round(pitchInfo.frequency)} Hz
                             </div>
                         </>
                     )}
                 </div>
 
-                {/* Mic Toggle Button */}
-                <button
-                    onClick={() => setIsListening(prev => !prev)}
-                    className={`px-8 py-3 rounded-2xl font-bold text-sm transition-all transform active:scale-95 ${isListening
-                        ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-500/30'
-                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30'
-                        }`}
-                >
+                {/* Mic Toggle */}
+                <button onClick={() => setIsListening(prev => !prev)}
+                    className={`px-8 py-3 rounded-2xl font-bold text-sm transition-all transform active:scale-95 ${isListening ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-500/30'
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30'}`}>
                     {isListening ? 'Stop Listening' : 'Start Practice'}
                 </button>
             </div>
 
-            {/* Bottom: Scale Bar — shows all 12 semitones with scale swaras highlighted */}
-            <div className="px-4 pb-4 shrink-0">
-                <div className="flex items-center justify-center gap-0.5 bg-gray-900/80 backdrop-blur-xl rounded-2xl p-3 border border-gray-800/50 max-w-lg mx-auto">
-                    {SARGAM_ALL.map((swar, idx) => {
-                        const isInScale = scaleIntervals.includes(idx);
-                        const isActive = pitchInfo && Math.abs(pitchInfo.interval - idx) < 0.5;
-                        const isClosest = pitchInfo && pitchInfo.closestSwara === swar;
+            {/* Bottom: 3-Saptak Scale Bar */}
+            <div className="px-2 pb-3 shrink-0 overflow-x-auto hidden-scrollbar">
+                <div className="flex flex-col gap-1 bg-gray-900/80 backdrop-blur-xl rounded-2xl p-2.5 border border-gray-800/50 max-w-2xl mx-auto">
+                    {SAPTAKS.map(oct => (
+                        <div key={oct.key} className="flex items-center gap-1">
+                            <span className={`text-[8px] sm:text-[9px] font-bold ${oct.color} w-12 sm:w-14 text-right pr-1 shrink-0 uppercase tracking-wider`}>
+                                {oct.name}
+                            </span>
+                            <div className="flex items-center gap-0.5 flex-1">
+                                {SARGAM_ALL.map((swar, idx) => {
+                                    const isInScale = scaleIntervals.includes(idx);
+                                    const isThisSaptak = pitchInfo && pitchInfo.saptak === oct.key;
+                                    const isActive = isThisSaptak && Math.abs(pitchInfo.interval - idx) < 0.5;
+                                    const isClosest = isThisSaptak && pitchInfo.closestSwara === swar;
 
-                        return (
-                            <div
-                                key={idx}
-                                className={`flex flex-col items-center justify-center rounded-lg transition-all duration-200 px-1.5 py-2 sm:px-2.5 min-w-[28px] sm:min-w-[36px] ${isActive
-                                    ? 'bg-indigo-500 text-white scale-110 shadow-lg shadow-indigo-500/40'
-                                    : isClosest
-                                        ? `${statusColors.bg} ${statusColors.border} border scale-105`
-                                        : isInScale
-                                            ? 'bg-gray-800/80 text-gray-300 border border-gray-700/30'
-                                            : 'bg-gray-900/50 text-gray-600 opacity-50'
-                                    }`}
-                            >
-                                <span className={`text-[9px] sm:text-xs font-bold leading-none ${isActive ? 'text-white' : isInScale ? 'text-gray-200' : 'text-gray-600'
-                                    }`}>
-                                    {swar}
-                                </span>
+                                    return (
+                                        <div key={idx}
+                                            className={`flex items-center justify-center rounded transition-all duration-150 px-0.5 py-1 sm:px-1.5 min-w-[20px] sm:min-w-[28px] ${isActive ? 'bg-indigo-500 text-white scale-110 shadow-md shadow-indigo-500/40'
+                                                    : isClosest ? `bg-gradient-to-br ${statusColors.bg} ${statusColors.border} border scale-105`
+                                                        : isInScale ? `${oct.bg} text-gray-400 border border-gray-700/20`
+                                                            : 'bg-gray-900/30 text-gray-700 opacity-30'}`}>
+                                            <span className={`text-[7px] sm:text-[9px] font-bold leading-none ${isActive ? 'text-white' : isInScale ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                {oct.dotFn(swar)}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
                             </div>
-                        );
-                    })}
+                        </div>
+                    ))}
                 </div>
             </div>
         </div>
