@@ -98,8 +98,8 @@ const SargamPractice = ({ onClose }) => {
         let closestSwara;
         let centsOff;
 
-        // Check if on a scale note (within ±20 cents)
-        const ON_NOTE_THRESHOLD = 20; // cents
+        // Check if on a scale note — wide zone (±45 cents ≈ quarter-tone each side)
+        const ON_NOTE_THRESHOLD = 45; // cents — forgiving zone-based approach
         if (centsFromLower <= ON_NOTE_THRESHOLD) {
             status = 'on-note';
             closestSwara = lowerSwara;
@@ -335,9 +335,9 @@ const SargamPractice = ({ onClose }) => {
                                 {pitchInfo.status === 'on-note' ? pitchInfo.closestSwara : pitchInfo.closestSwara}
                             </div>
 
-                            {/* Cents offset */}
-                            <div className={`text-lg font-mono font-bold mt-1 ${pitchInfo.centsOff === 0 ? 'text-emerald-400' : Math.abs(pitchInfo.centsOff) < 15 ? 'text-amber-400' : 'text-red-400'}`}>
-                                {pitchInfo.centsOff > 0 ? '+' : ''}{pitchInfo.centsOff}¢
+                            {/* Zone indicator — friendly, not exact */}
+                            <div className={`text-sm font-bold mt-1 ${pitchInfo.status === 'on-note' ? 'text-emerald-400' : 'text-gray-400'}`}>
+                                {pitchInfo.status === 'on-note' ? '● In Zone' : `${Math.round(pitchInfo.frequency)} Hz`}
                             </div>
 
                             {/* Between indicator */}
@@ -366,8 +366,8 @@ const SargamPractice = ({ onClose }) => {
                 <button
                     onClick={() => setIsListening(prev => !prev)}
                     className={`px-8 py-3 rounded-2xl font-bold text-sm transition-all transform active:scale-95 ${isListening
-                            ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-500/30'
-                            : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30'
+                        ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-500/30'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/30'
                         }`}
                 >
                     {isListening ? 'Stop Listening' : 'Start Practice'}
@@ -386,12 +386,12 @@ const SargamPractice = ({ onClose }) => {
                             <div
                                 key={idx}
                                 className={`flex flex-col items-center justify-center rounded-lg transition-all duration-200 px-1.5 py-2 sm:px-2.5 min-w-[28px] sm:min-w-[36px] ${isActive
-                                        ? 'bg-indigo-500 text-white scale-110 shadow-lg shadow-indigo-500/40'
-                                        : isClosest
-                                            ? `${statusColors.bg} ${statusColors.border} border scale-105`
-                                            : isInScale
-                                                ? 'bg-gray-800/80 text-gray-300 border border-gray-700/30'
-                                                : 'bg-gray-900/50 text-gray-600 opacity-50'
+                                    ? 'bg-indigo-500 text-white scale-110 shadow-lg shadow-indigo-500/40'
+                                    : isClosest
+                                        ? `${statusColors.bg} ${statusColors.border} border scale-105`
+                                        : isInScale
+                                            ? 'bg-gray-800/80 text-gray-300 border border-gray-700/30'
+                                            : 'bg-gray-900/50 text-gray-600 opacity-50'
                                     }`}
                             >
                                 <span className={`text-[9px] sm:text-xs font-bold leading-none ${isActive ? 'text-white' : isInScale ? 'text-gray-200' : 'text-gray-600'
