@@ -3,6 +3,7 @@ import AudioPlayer from './components/AudioPlayer';
 import Controls from './components/Controls';
 import TestRecorder from './components/TestRecorder';
 import PitchReferenceGuide from './components/PitchReferenceGuide';
+import SargamPractice from './components/SargamPractice';
 import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff, Info, Download, PlusSquare, PlaySquare, Repeat, Repeat1, XSquare, ArrowLeft, ArrowRight } from 'lucide-react';
 import { YIN } from 'pitchfinder';
 
@@ -27,6 +28,7 @@ function App() {
   const [currentNote, setCurrentNote] = useState(null);
   const [isLiveMicEnabled, setIsLiveMicEnabled] = useState(false);
   const [showPitchGuide, setShowPitchGuide] = useState(false);
+  const [showSargamPractice, setShowSargamPractice] = useState(false);
 
   const playerRef = useRef(null);
   const visualizerContainerRef = useRef(null);
@@ -530,6 +532,16 @@ function App() {
               title="Open Mic Diagnostic"
             >
               <Bug size={14} />
+            </button>
+
+            {/* SARGAM PRACTICE BUTTON */}
+            <button
+              onClick={() => setShowSargamPractice(true)}
+              className="ml-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-bold transition shadow-md shadow-amber-500/20"
+              title="Open Sargam Practice Mode"
+            >
+              <Music2 size={14} />
+              <span className="hidden sm:inline">Sargam</span>
             </button>
           </div>
 
@@ -1117,6 +1129,13 @@ function App() {
             onClose={() => setShowPitchGuide(false)}
             showSargam={showSargam}
             rootKey={rootKey}
+          />
+        )
+      }
+      {
+        showSargamPractice && (
+          <SargamPractice
+            onClose={() => setShowSargamPractice(false)}
           />
         )
       }
