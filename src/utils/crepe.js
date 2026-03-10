@@ -182,3 +182,119 @@ export function createCREPEDetector(options = {}) {
         return result ? result.frequency : null;
     };
 }
+
+/**
+ * Process an entire audio buffer through CREPE for file analysis.
+ * Much more accurate than YIN for batch processing.
+ * 
+ * @param {AudioBuffer} buffer - Web Audio API AudioBuffer
+ * @param {object} options - { hopSize, onProgress }
+ * @returns {Promise<Array<{time: number, freq: number|null, confidence: number, rms: number}>>}
+ */
+export async function processAudioBuffer(buffer, options = {}) {
+    const hopSize = options.hopSize || 1024; // 50% overlap with 2048 window
+    const onProgress = options.onProgress || (() => { });
+
+    // Ensure model is loaded
+    await loadCREPE();
+    if (!model) {
+        console.error('CREPE model not available for batch processing');
+        return [];
+    }
+
+    const channelData = buffer.getChannelData(0);
+    const sr = buffer.sampleRate;
+    const frameSize = 2048; // Analysis window
+    const totalFrames = Math.floor((channelData.length - frameSize) / hopSize) + 1;
+
+    const results = [];
+
+    // Process in chunks to avoid UI freeze
+    const BATCH_SIZE = 16;
+
+    for (let frameIdx = 0; frameIdx < totalFrames; frameIdx++) {
+        const startSample = frameIdx * hopSize;
+        const chunk = channelData.slice(startSample, startSample + frameSize);
+
+        // Compute RMS energy
+        let sumSq = 0;
+        for (let j = 0; j < chunk.length; j++) {
+            sumSq += chunk[j] * chunk[j];
+        }
+        const rms = Math.sqrt(sumSq / chunk.length);
+
+        const time = startSample / sr;
+
+        // Skip silent frames
+        if (rms < 0.005) {
+            results.push({ time, freq: null, confidence: 0, rms });
+            continue;
+        }
+
+        // Run CREPE detection
+        const detection = detectPitch(chunk, sr);
+
+        if (detection && detection.frequency > 50 && detection.frequency < 1200) {
+            results.push({
+                time,
+                freq: detection.frequency,
+                confidence: detection.confidence,
+                rms
+            });
+        } else {
+            results.push({ time, freq: null, confidence: 0, rms });
+        }
+
+        // Yield to UI every BATCH_SIZE frames
+        if (frameIdx % BATCH_SIZE === 0) {
+            onProgress(frameIdx / totalFrames);
+            await new Promise(r => setTimeout(r, 0));
+        }
+    }
+
+    onProgress(1);
+
+    // --- POST-PROCESSING ---
+    // 1. Confidence filtering: remove low-confidence detections
+    for (let i = 0; i < results.length; i++) {
+        if (results[i].confidence < 0.25) {
+            results[i].freq = null;
+        }
+    }
+
+    // 2. Median smoothing (window=5) for stable pitch
+    const smoothed = results.map(r => ({ ...r }));
+    for (let i = 0; i < smoothed.length; i++) {
+        if (!smoothed[i].freq) continue;
+
+        const neighbors = [];
+        for (let j = Math.max(0, i - 2); j <= Math.min(smoothed.length - 1, i + 2); j++) {
+            if (results[j].freq) neighbors.push(results[j].freq);
+        }
+        if (neighbors.length >= 3) {
+            neighbors.sort((a, b) => a - b);
+            smoothed[i].freq = neighbors[Math.floor(neighbors.length / 2)];
+        }
+    }
+
+    // 3. Octave error correction (compare to local median)
+    for (let i = 0; i < smoothed.length; i++) {
+        if (!smoothed[i].freq) continue;
+
+        const neighbors = [];
+        for (let j = Math.max(0, i - 5); j <= Math.min(smoothed.length - 1, i + 5); j++) {
+            if (j !== i && smoothed[j].freq) neighbors.push(smoothed[j].freq);
+        }
+        if (neighbors.length < 3) continue;
+
+        neighbors.sort((a, b) => a - b);
+        const median = neighbors[Math.floor(neighbors.length / 2)];
+        const ratio = smoothed[i].freq / median;
+
+        if (ratio >= 1.85 && ratio <= 2.15) smoothed[i].freq /= 2;
+        else if (ratio >= 0.47 && ratio <= 0.54) smoothed[i].freq *= 2;
+        else if (ratio >= 2.85 && ratio <= 3.15) smoothed[i].freq /= 3;
+    }
+
+    return smoothed;
+}
