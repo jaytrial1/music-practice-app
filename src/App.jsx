@@ -5,6 +5,8 @@ import TestRecorder from './components/TestRecorder';
 import PitchReferenceGuide from './components/PitchReferenceGuide';
 import SargamPractice from './components/SargamPractice';
 import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff, Info, Download, PlusSquare, PlaySquare, Repeat, Repeat1, XSquare, ArrowLeft, ArrowRight } from 'lucide-react';
+import { createCREPEDetector, loadCREPE, isCREPEReady } from './utils/crepe';
+// Legacy fallback — keep for AudioPlayer offline analysis
 import { YIN } from 'pitchfinder';
 
 // Sargam Mapping Helpers
@@ -382,7 +384,7 @@ function App() {
     document.body.removeChild(link);
   };
 
-  // Live Mic Pitch Detection
+  // Live Mic Pitch Detection (CREPE for high accuracy)
   useEffect(() => {
     let audioCtx;
     let stream;
@@ -391,6 +393,9 @@ function App() {
 
     const startMic = async () => {
       try {
+        // Start loading CREPE model in background
+        loadCREPE();
+
         stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: false,
@@ -407,32 +412,40 @@ function App() {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const source = audioCtx.createMediaStreamSource(stream);
 
-        // We use ScriptProcessorNode for wide compatibility and easy chunk access
-        scriptNode = audioCtx.createScriptProcessor(2048, 1, 1);
-        const detectPitch = YIN({
+        // Create CREPE detector (uses model once loaded, returns null while loading)
+        const crepeDetect = createCREPEDetector({ sampleRate: audioCtx.sampleRate });
+
+        // Fallback YIN for when CREPE is still loading
+        const yinDetect = YIN({
           sampleRate: audioCtx.sampleRate,
           threshold: 0.15,
           probabilityThreshold: 0.05
         });
 
+        scriptNode = audioCtx.createScriptProcessor(2048, 1, 1);
+
         source.connect(scriptNode);
-        scriptNode.connect(audioCtx.destination); // Required for script node to fire
+        scriptNode.connect(audioCtx.destination);
 
         scriptNode.onaudioprocess = (e) => {
           if (!isActive) return;
           const inputBuffer = e.inputBuffer.getChannelData(0);
 
-          // Noise Gate (ignore silent moments)
+          // Noise Gate
           let rms = 0;
           for (let i = 0; i < inputBuffer.length; i++) {
             rms += inputBuffer[i] * inputBuffer[i];
           }
           rms = Math.sqrt(rms / inputBuffer.length);
 
-          if (rms > 0.01) { // Only detect if loud enough
-            const frequency = detectPitch(inputBuffer);
+          if (rms > 0.01) {
+            // Try CREPE first, fall back to YIN while model loads
+            let frequency = crepeDetect(inputBuffer);
+            if (!frequency) {
+              frequency = yinDetect(inputBuffer);
+            }
+
             if (frequency && frequency > 50 && frequency < 1200) {
-              // Convert frequency to note
               const pitch = Math.round(69 + 12 * Math.log2(frequency / 440));
               const octave = Math.floor(pitch / 12) - 1;
               const noteIndex = pitch % 12;

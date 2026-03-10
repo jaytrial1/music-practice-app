@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { X, Music2, ChevronDown, Play, Square } from 'lucide-react';
+import { createCREPEDetector, loadCREPE } from '../utils/crepe';
 import { YIN } from 'pitchfinder';
 
 const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -88,6 +89,9 @@ const SargamPractice = ({ onClose }) => {
 
         const startMic = async () => {
             try {
+                // Start loading CREPE model in background
+                loadCREPE();
+
                 const stream = await navigator.mediaDevices.getUserMedia({
                     audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
                 });
@@ -104,7 +108,10 @@ const SargamPractice = ({ onClose }) => {
 
                 const scriptNode = audioCtx.createScriptProcessor(2048, 1, 1);
                 scriptNodeRef.current = scriptNode;
-                const detectPitch = YIN({ sampleRate: audioCtx.sampleRate, threshold: 0.15, probabilityThreshold: 0.05 });
+
+                // CREPE detector (high accuracy) with YIN fallback
+                const crepeDetect = createCREPEDetector({ sampleRate: audioCtx.sampleRate });
+                const yinDetect = YIN({ sampleRate: audioCtx.sampleRate, threshold: 0.15, probabilityThreshold: 0.05 });
 
                 gainNode.connect(scriptNode);
                 scriptNode.connect(audioCtx.destination);
@@ -121,7 +128,9 @@ const SargamPractice = ({ onClose }) => {
                     const elapsed = (performance.now() - startTimeRef.current) / 1000;
 
                     if (rms > 0.01) {
-                        const frequency = detectPitch(inputBuffer);
+                        // Try CREPE first, fall back to YIN
+                        let frequency = crepeDetect(inputBuffer);
+                        if (!frequency) frequency = yinDetect(inputBuffer);
                         if (frequency && frequency > 50 && frequency < 1200) {
                             recentFreqs.push(frequency);
                             if (recentFreqs.length > 3) recentFreqs.shift();
