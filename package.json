@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tensorflow/tfjs": "^4.22.0",
     "autoprefixer": "^10.4.24",
     "lucide-react": "^0.574.0",
     "pitchfinder": "^2.3.4",

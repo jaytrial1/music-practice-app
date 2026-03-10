@@ -5,8 +5,6 @@ import TestRecorder from './components/TestRecorder';
 import PitchReferenceGuide from './components/PitchReferenceGuide';
 import SargamPractice from './components/SargamPractice';
 import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff, Info, Download, PlusSquare, PlaySquare, Repeat, Repeat1, XSquare, ArrowLeft, ArrowRight } from 'lucide-react';
-import { createCREPEDetector, loadCREPE, isCREPEReady } from './utils/crepe';
-// Legacy fallback — keep for AudioPlayer offline analysis
 import { YIN } from 'pitchfinder';
 
 // Sargam Mapping Helpers
@@ -384,7 +382,7 @@ function App() {
     document.body.removeChild(link);
   };
 
-  // Live Mic Pitch Detection (CREPE for high accuracy)
+  // Live Mic Pitch Detection
   useEffect(() => {
     let audioCtx;
     let stream;
@@ -393,9 +391,6 @@ function App() {
 
     const startMic = async () => {
       try {
-        // Start loading CREPE model in background
-        loadCREPE();
-
         stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: false,
@@ -412,17 +407,12 @@ function App() {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const source = audioCtx.createMediaStreamSource(stream);
 
-        // Create CREPE detector (uses model once loaded, returns null while loading)
-        const crepeDetect = createCREPEDetector({ sampleRate: audioCtx.sampleRate });
-
-        // Fallback YIN for when CREPE is still loading
-        const yinDetect = YIN({
+        scriptNode = audioCtx.createScriptProcessor(2048, 1, 1);
+        const detectPitch = YIN({
           sampleRate: audioCtx.sampleRate,
           threshold: 0.15,
           probabilityThreshold: 0.05
         });
-
-        scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
 
         source.connect(scriptNode);
         scriptNode.connect(audioCtx.destination);
@@ -439,12 +429,7 @@ function App() {
           rms = Math.sqrt(rms / inputBuffer.length);
 
           if (rms > 0.01) {
-            // Try CREPE first, fall back to YIN while model loads
-            let frequency = crepeDetect(inputBuffer);
-            if (!frequency) {
-              frequency = yinDetect(inputBuffer);
-            }
-
+            const frequency = detectPitch(inputBuffer);
             if (frequency && frequency > 50 && frequency < 1200) {
               const pitch = Math.round(69 + 12 * Math.log2(frequency / 440));
               const octave = Math.floor(pitch / 12) - 1;

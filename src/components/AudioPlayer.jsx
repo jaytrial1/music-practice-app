@@ -3,7 +3,6 @@ import WaveSurfer from 'wavesurfer.js';
 import RegionsPlugin from 'wavesurfer.js/dist/plugins/regions.esm.js';
 import SpectrogramPlugin from 'wavesurfer.js/dist/plugins/spectrogram.esm.js';
 import { YIN } from 'pitchfinder';
-import { processAudioBuffer, loadCREPE, isCREPEReady } from '../utils/crepe';
 
 // Note Helpers
 const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -456,57 +455,17 @@ const AudioPlayer = forwardRef(({
         return { pitches, segments };
     };
 
-    // Analyze Algorithm (File Upload) — Uses CREPE with YIN fallback
+    // Analyze Algorithm (File Upload)
     const analyzePitch = async (buffer) => {
         try {
-            console.log("Analyzing File Pitch (CREPE)...");
-
-            // Try CREPE first (high accuracy)
-            let segments = [];
-            let pitches = [];
-
-            try {
-                const crepeResults = await processAudioBuffer(buffer, {
-                    hopSize: 1024,
-                    onProgress: (p) => {
-                        if (Math.round(p * 100) % 20 === 0) {
-                            console.log(`CREPE analysis: ${Math.round(p * 100)}%`);
-                        }
-                    }
-                });
-
-                console.log(`CREPE analysis complete. ${crepeResults.length} frames.`);
-
-                // Convert CREPE results to the segment format
-                for (let i = 0; i < crepeResults.length; i++) {
-                    const r = crepeResults[i];
-                    pitches.push(r.freq);
-
-                    if (r.freq && r.freq > 60 && r.freq < 1100) {
-                        segments.push({
-                            startTime: r.time,
-                            endTime: r.time + (1024 / buffer.sampleRate),
-                            freq: r.freq,
-                            rms: r.rms
-                        });
-                    }
-                }
-
-                const validCount = crepeResults.filter(r => r.freq).length;
-                console.log(`CREPE valid detections: ${validCount} / ${crepeResults.length} (${(validCount / crepeResults.length * 100).toFixed(1)}%)`);
-
-            } catch (crepeErr) {
-                console.warn("CREPE failed, falling back to YIN:", crepeErr);
-                const result = processBufferToSegments(buffer);
-                pitches = result.pitches;
-                segments = result.segments;
-            }
+            console.log("Analyzing File Pitch...");
+            const { pitches, segments } = processBufferToSegments(buffer);
 
             setPitchData(pitches);
             setDecodingDuration(buffer.duration);
             setPitchSegments(segments);
 
-            console.log("Pitch analysis complete. Segments:", segments.length);
+            console.log("Pitch analysis complete. Frames:", segments.length);
         } catch (e) {
             console.error("Pitch analysis failed:", e);
         }
