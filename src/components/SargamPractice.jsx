@@ -106,7 +106,7 @@ const SargamPractice = ({ onClose }) => {
                 gainNode.gain.value = 5;
                 source.connect(gainNode);
 
-                const scriptNode = audioCtx.createScriptProcessor(2048, 1, 1);
+                const scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
                 scriptNodeRef.current = scriptNode;
 
                 // CREPE detector (high accuracy) with YIN fallback

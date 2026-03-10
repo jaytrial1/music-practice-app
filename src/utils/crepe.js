@@ -83,6 +83,12 @@ function binToFrequency(bin) {
 export function detectPitch(audioBuffer, sampleRate) {
     if (!model) return null;
 
+    // Calculate minimum input size needed to get 1024 samples at 16kHz
+    const minInputSamples = Math.ceil(FRAME_SIZE * sampleRate / SAMPLE_RATE);
+    if (audioBuffer.length < minInputSamples * 0.8) {
+        return null; // Input too short for reliable CREPE detection
+    }
+
     // Resample to 16kHz if needed
     let resampled = audioBuffer;
     if (sampleRate !== SAMPLE_RATE) {
@@ -98,15 +104,14 @@ export function detectPitch(audioBuffer, sampleRate) {
         }
     }
 
-    // Take center 1024 samples (or pad if shorter)
+    // Take center 1024 samples — MUST have enough after resampling
     let frame;
     if (resampled.length >= FRAME_SIZE) {
         const start = Math.floor((resampled.length - FRAME_SIZE) / 2);
         frame = resampled.slice(start, start + FRAME_SIZE);
     } else {
-        frame = new Float32Array(FRAME_SIZE);
-        const offset = Math.floor((FRAME_SIZE - resampled.length) / 2);
-        frame.set(resampled, offset);
+        // Not enough samples even after resampling — skip
+        return null;
     }
 
     // Normalize
@@ -204,7 +209,9 @@ export async function processAudioBuffer(buffer, options = {}) {
 
     const channelData = buffer.getChannelData(0);
     const sr = buffer.sampleRate;
-    const frameSize = 2048; // Analysis window
+    // Frame size must be large enough so resampling to 16kHz gives >= 1024 samples
+    // At 44.1kHz: need ceil(1024 * 44100/16000) = 2824, so use 4096
+    const frameSize = Math.max(4096, Math.ceil(FRAME_SIZE * sr / SAMPLE_RATE) + 512);
     const totalFrames = Math.floor((channelData.length - frameSize) / hopSize) + 1;
 
     const results = [];

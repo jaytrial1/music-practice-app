@@ -422,7 +422,7 @@ function App() {
           probabilityThreshold: 0.05
         });
 
-        scriptNode = audioCtx.createScriptProcessor(2048, 1, 1);
+        scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
 
         source.connect(scriptNode);
         scriptNode.connect(audioCtx.destination);
