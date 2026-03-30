@@ -1033,14 +1033,12 @@ const AudioPlayer = forwardRef(({
             }
 
             allUserPaths.forEach(path => {
-                if (path.length < 2) return;
-                for (let i = 0; i < path.length - 1; i++) {
-                    const p1 = path[i];
-                    const p2 = path[i + 1];
-                    if (Math.abs(p2.y - p1.y) > height / 3) continue;
+                if (path.length > 0) {
                     ctx.beginPath();
-                    ctx.moveTo(p1.x, p1.y);
-                    ctx.lineTo(p2.x, p2.y);
+                    ctx.moveTo(path[0].x, path[0].y);
+                    for (let i = 1; i < path.length; i++) {
+                        ctx.lineTo(path[i].x, path[i].y);
+                    }
                     ctx.stroke();
                 }
             });

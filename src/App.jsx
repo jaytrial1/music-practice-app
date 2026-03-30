@@ -337,15 +337,24 @@ function App() {
       return;
     }
 
-    // Simple Audio element — same as TestRecorder, works on mobile
-    const audio = new Audio(userAudioUrl);
-    audio.play().catch(err => console.error('Playback failed:', err));
-    setIsPlayingRecording(true);
-    audio.onended = () => {
+    try {
+      // Simple HTML5 Audio element — same as TestRecorder.
+      // AudioContext + fetch() approach fails on Safari iOS because it waits for the async promise, 
+      // preventing the audio from playing as a direct user interaction.
+      const audio = new Audio(userAudioUrl);
+      audio.play().catch(e => console.error("Audio playback error:", e));
+      
+      setIsPlayingRecording(true);
+      
+      audio.onended = () => {
+        setIsPlayingRecording(false);
+      };
+      
+      recordingAudioRef.current = audio;
+    } catch (e) {
+      console.error('Playback failed:', e);
       setIsPlayingRecording(false);
-      recordingAudioRef.current = null;
-    };
-    recordingAudioRef.current = audio;
+    }
   };
 
   const handleDeleteRecording = () => {
