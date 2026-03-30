@@ -254,16 +254,21 @@ function App() {
     }
   };
 
-  // Quick Recording Logic (simple voice capture — no graph/pitch)
+  // Quick Recording — standalone MediaRecorder (same as TestRecorder/debug)
   const [isRecording, setIsRecording] = useState(false);
   const [userAudioUrl, setUserAudioUrl] = useState(null);
   const [isPlayingRecording, setIsPlayingRecording] = useState(false);
   const recordingAudioRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const recordChunksRef = useRef([]);
+  const recordStreamRef = useRef(null);
 
-  const handleRecordToggle = () => {
+  const handleRecordToggle = async () => {
     if (isRecording) {
       // STOP recording
-      playerRef.current?.stopRecording();
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
       setIsRecording(false);
     } else {
       // START — auto-delete any previous recording
@@ -271,15 +276,53 @@ function App() {
         URL.revokeObjectURL(userAudioUrl);
         setUserAudioUrl(null);
       }
-      playerRef.current?.startRecording();
-      setIsRecording(true);
-      // Don't force play — user decides if song plays or not
-    }
-  };
 
-  const handleRecordingComplete = ({ blob }) => {
-    const url = URL.createObjectURL(blob);
-    setUserAudioUrl(url);
+      try {
+        recordChunksRef.current = [];
+
+        // Same constraints as TestRecorder (echo cancellation OFF)
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          }
+        });
+        recordStreamRef.current = stream;
+
+        // Same mime type detection as TestRecorder
+        let options = {};
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          options = { mimeType: 'audio/webm;codecs=opus' };
+        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          options = { mimeType: 'audio/mp4' };
+        }
+        const actualMimeType = options.mimeType || 'audio/webm';
+
+        const mediaRecorder = new MediaRecorder(stream, options);
+        mediaRecorderRef.current = mediaRecorder;
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) recordChunksRef.current.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordChunksRef.current, { type: actualMimeType });
+          const url = URL.createObjectURL(blob);
+          setUserAudioUrl(url);
+          // Cleanup mic stream
+          if (recordStreamRef.current) {
+            recordStreamRef.current.getTracks().forEach(t => t.stop());
+            recordStreamRef.current = null;
+          }
+        };
+
+        mediaRecorder.start();
+        setIsRecording(true);
+      } catch (err) {
+        console.error("Recording failed:", err);
+      }
+    }
   };
 
   const handlePlayRecording = async () => {
@@ -775,7 +818,6 @@ function App() {
                   notationMode={notationMode}
                   isFullscreen={isFullscreen}
                   onFinish={() => setIsPlaying(false)}
-                  onRecordingComplete={handleRecordingComplete}
                   onSequenceLoopEnd={isSequencePlaying ? handleSequenceLoopEnd : undefined}
                 />
               </div>
