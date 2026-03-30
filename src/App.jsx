@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import AudioPlayer from './components/AudioPlayer';
 import Controls from './components/Controls';
 import TestRecorder from './components/TestRecorder';
@@ -254,21 +254,26 @@ function App() {
     }
   };
 
-  // Recording Logic
+  // Quick Recording Logic (simple voice capture — no graph/pitch)
   const [isRecording, setIsRecording] = useState(false);
   const [userAudioUrl, setUserAudioUrl] = useState(null);
+  const [isPlayingRecording, setIsPlayingRecording] = useState(false);
+  const recordingAudioRef = useRef(null);
 
   const handleRecordToggle = () => {
     if (isRecording) {
-      // STOP â€” keep song playing so user can compare
+      // STOP recording
       playerRef.current?.stopRecording();
       setIsRecording(false);
     } else {
-      // START â€” song keeps playing, echoCancellation is forced OFF in AudioPlayer
+      // START — auto-delete any previous recording
+      if (userAudioUrl) {
+        URL.revokeObjectURL(userAudioUrl);
+        setUserAudioUrl(null);
+      }
       playerRef.current?.startRecording();
       setIsRecording(true);
-      setUserAudioUrl(null);
-      if (!isPlaying) setIsPlaying(true); // Play song to sing along
+      // Don't force play — user decides if song plays or not
     }
   };
 
@@ -279,10 +284,16 @@ function App() {
 
   const handlePlayRecording = async () => {
     if (!userAudioUrl) return;
-    // Pause song first so user only hears their recording
-    if (isPlaying) setIsPlaying(false);
+
+    // If already playing, stop it
+    if (isPlayingRecording && recordingAudioRef.current) {
+      recordingAudioRef.current.pause();
+      recordingAudioRef.current = null;
+      setIsPlayingRecording(false);
+      return;
+    }
+
     try {
-      // Use AudioContext so audio routes through headphones (not forced to speaker on mobile)
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const response = await fetch(userAudioUrl);
       const arrayBuffer = await response.arrayBuffer();
@@ -291,11 +302,31 @@ function App() {
       source.buffer = audioBuffer;
       source.connect(audioCtx.destination);
       source.start(0);
+      setIsPlayingRecording(true);
+      source.onended = () => {
+        setIsPlayingRecording(false);
+        audioCtx.close();
+      };
+      recordingAudioRef.current = { pause: () => { source.stop(); audioCtx.close(); } };
     } catch (e) {
-      // Fallback to basic Audio element
-      console.warn('AudioContext playback failed, using Audio element:', e);
+      console.warn('AudioContext playback failed, using Audio:', e);
       const audio = new Audio(userAudioUrl);
       audio.play();
+      setIsPlayingRecording(true);
+      audio.onended = () => setIsPlayingRecording(false);
+      recordingAudioRef.current = audio;
+    }
+  };
+
+  const handleDeleteRecording = () => {
+    if (isPlayingRecording && recordingAudioRef.current) {
+      recordingAudioRef.current.pause();
+      recordingAudioRef.current = null;
+      setIsPlayingRecording(false);
+    }
+    if (userAudioUrl) {
+      URL.revokeObjectURL(userAudioUrl);
+      setUserAudioUrl(null);
     }
   };
 
@@ -947,22 +978,33 @@ function App() {
                             {isPlaying ? <Pause size={24} fill="white" /> : <Play size={24} fill="white" className="ml-0.5" />}
                           </button>
 
+                          {/* Quick Record */}
                           <button
                             onClick={(e) => { e.stopPropagation(); handleRecordToggle(); resetFsTimer(); }}
                             className={`p-3 rounded-full transition ${isRecording ? 'bg-red-600 animate-pulse ring-4 ring-red-500/30' : 'bg-gray-700 hover:bg-gray-600 text-white'}`}
+                            title={isRecording ? "Stop Recording" : "Record Voice"}
                           >
                             <Mic2 size={20} />
                           </button>
 
-                          {/* Play My Recording */}
+                          {/* Play / Stop Recording */}
                           {userAudioUrl && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handlePlayRecording(); resetFsTimer(); }}
-                              className="p-3 bg-orange-600 hover:bg-orange-700 rounded-full transition text-white shadow-lg"
-                              title="Play My Recording"
-                            >
-                              <PlayCircle size={20} />
-                            </button>
+                            <>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handlePlayRecording(); resetFsTimer(); }}
+                                className={`p-3 rounded-full transition text-white shadow-lg ${isPlayingRecording ? 'bg-amber-500 hover:bg-amber-600 ring-2 ring-amber-400/40' : 'bg-orange-600 hover:bg-orange-700'}`}
+                                title={isPlayingRecording ? "Stop Playback" : "Play My Recording"}
+                              >
+                                {isPlayingRecording ? <Pause size={18} /> : <PlayCircle size={20} />}
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteRecording(); resetFsTimer(); }}
+                                className="p-2.5 bg-gray-800/80 hover:bg-red-900/80 rounded-full border border-gray-700/50 hover:border-red-500/50 text-gray-400 hover:text-red-300 transition"
+                                title="Delete Recording"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </>
                           )}
 
                           <button
@@ -1093,6 +1135,8 @@ function App() {
                   onRecordToggle={handleRecordToggle}
                   userAudioUrl={userAudioUrl}
                   onPlayRecording={handlePlayRecording}
+                  isPlayingRecording={isPlayingRecording}
+                  onDeleteRecording={handleDeleteRecording}
                   sequenceLoops={sequenceLoops}
                   onAddSequenceLoop={handleAddSequenceLoop}
                   onPlaySequence={handlePlaySequence}

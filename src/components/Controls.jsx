@@ -35,6 +35,8 @@ const Controls = ({
     onRecordToggle,
     userAudioUrl,
     onPlayRecording,
+    isPlayingRecording,
+    onDeleteRecording,
     sequenceLoops = [],
     onAddSequenceLoop,
     onPlaySequence,
@@ -111,15 +113,24 @@ const Controls = ({
                         <Mic size={24} />
                     </button>
 
-                    {/* Play My Recording Button (Mobile Friendly) */}
+                    {/* Play My Recording + Delete */}
                     {userAudioUrl && (
-                        <button
-                            onClick={onPlayRecording}
-                            className="p-4 bg-orange-600 hover:bg-orange-700 rounded-full transition text-white shadow-lg animate-in zoom-in"
-                            title="Play My Recording"
-                        >
-                            <PlayCircle size={28} />
-                        </button>
+                        <>
+                            <button
+                                onClick={onPlayRecording}
+                                className={`p-4 rounded-full transition text-white shadow-lg animate-in zoom-in ${isPlayingRecording ? 'bg-amber-500 hover:bg-amber-600 ring-2 ring-amber-400/40' : 'bg-orange-600 hover:bg-orange-700'}`}
+                                title={isPlayingRecording ? "Stop Playback" : "Play My Recording"}
+                            >
+                                {isPlayingRecording ? <Pause size={24} /> : <PlayCircle size={28} />}
+                            </button>
+                            <button
+                                onClick={onDeleteRecording}
+                                className="p-3 bg-gray-700 hover:bg-red-900 rounded-full transition text-gray-400 hover:text-red-300 border border-gray-600 hover:border-red-500"
+                                title="Delete Recording"
+                            >
+                                <Trash2 size={20} />
+                            </button>
+                        </>
                     )}
 
                     <button
