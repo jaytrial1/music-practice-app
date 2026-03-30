@@ -1033,7 +1033,16 @@ const AudioPlayer = forwardRef(({
             }
 
             allUserPaths.forEach(path => {
-                drawSmoothCurve(ctx, path, 1.0);
+                if (path.length < 2) return;
+                for (let i = 0; i < path.length - 1; i++) {
+                    const p1 = path[i];
+                    const p2 = path[i + 1];
+                    if (Math.abs(p2.y - p1.y) > height / 3) continue;
+                    ctx.beginPath();
+                    ctx.moveTo(p1.x, p1.y);
+                    ctx.lineTo(p2.x, p2.y);
+                    ctx.stroke();
+                }
             });
         }
 

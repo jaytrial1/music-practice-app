@@ -325,40 +325,27 @@ function App() {
     }
   };
 
-  const handlePlayRecording = async () => {
+  const handlePlayRecording = () => {
     if (!userAudioUrl) return;
 
     // If already playing, stop it
     if (isPlayingRecording && recordingAudioRef.current) {
       recordingAudioRef.current.pause();
+      recordingAudioRef.current.currentTime = 0;
       recordingAudioRef.current = null;
       setIsPlayingRecording(false);
       return;
     }
 
-    try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const response = await fetch(userAudioUrl);
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-      const source = audioCtx.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(audioCtx.destination);
-      source.start(0);
-      setIsPlayingRecording(true);
-      source.onended = () => {
-        setIsPlayingRecording(false);
-        audioCtx.close();
-      };
-      recordingAudioRef.current = { pause: () => { source.stop(); audioCtx.close(); } };
-    } catch (e) {
-      console.warn('AudioContext playback failed, using Audio:', e);
-      const audio = new Audio(userAudioUrl);
-      audio.play();
-      setIsPlayingRecording(true);
-      audio.onended = () => setIsPlayingRecording(false);
-      recordingAudioRef.current = audio;
-    }
+    // Simple Audio element — same as TestRecorder, works on mobile
+    const audio = new Audio(userAudioUrl);
+    audio.play().catch(err => console.error('Playback failed:', err));
+    setIsPlayingRecording(true);
+    audio.onended = () => {
+      setIsPlayingRecording(false);
+      recordingAudioRef.current = null;
+    };
+    recordingAudioRef.current = audio;
   };
 
   const handleDeleteRecording = () => {
