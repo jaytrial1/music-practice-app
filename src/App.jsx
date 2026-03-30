@@ -326,31 +326,21 @@ function App() {
   };
 
   const handlePlayRecording = () => {
-    if (!userAudioUrl) return;
+    if (!userAudioUrl || !recordingAudioRef.current) return;
 
     // If already playing, stop it
-    if (isPlayingRecording && recordingAudioRef.current) {
+    if (isPlayingRecording) {
       recordingAudioRef.current.pause();
       recordingAudioRef.current.currentTime = 0;
-      recordingAudioRef.current = null;
       setIsPlayingRecording(false);
       return;
     }
 
     try {
-      // Simple HTML5 Audio element — same as TestRecorder.
-      // AudioContext + fetch() approach fails on Safari iOS because it waits for the async promise, 
-      // preventing the audio from playing as a direct user interaction.
-      const audio = new Audio(userAudioUrl);
-      audio.play().catch(e => console.error("Audio playback error:", e));
-      
+      // Use the hidden DOM <audio> element. 
+      // Safari prefers DOM elements over `new Audio()` for bypassing autoplay restrictions
+      recordingAudioRef.current.play().catch(e => console.error("Audio playback error:", e));
       setIsPlayingRecording(true);
-      
-      audio.onended = () => {
-        setIsPlayingRecording(false);
-      };
-      
-      recordingAudioRef.current = audio;
     } catch (e) {
       console.error('Playback failed:', e);
       setIsPlayingRecording(false);
@@ -360,7 +350,6 @@ function App() {
   const handleDeleteRecording = () => {
     if (isPlayingRecording && recordingAudioRef.current) {
       recordingAudioRef.current.pause();
-      recordingAudioRef.current = null;
       setIsPlayingRecording(false);
     }
     if (userAudioUrl) {
@@ -1219,6 +1208,14 @@ function App() {
           />
         )
       }
+
+      {/* Hidden Audio Player for Quick Recording Playback (Mobile Fix) */}
+      <audio 
+        ref={recordingAudioRef} 
+        src={userAudioUrl || ''} 
+        onEnded={() => setIsPlayingRecording(false)} 
+        className="hidden" 
+      />
     </div >
   );
 }
