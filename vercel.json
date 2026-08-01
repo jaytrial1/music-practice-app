@@ -1,0 +1,10 @@
+{
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "installCommand": "npm install",
+  "functions": {
+    "api/extract-audio.js": {
+      "maxDuration": 30
+    }
+  }
+}

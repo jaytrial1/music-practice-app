@@ -4,7 +4,7 @@ import Controls from './components/Controls';
 import TestRecorder from './components/TestRecorder';
 import PitchReferenceGuide from './components/PitchReferenceGuide';
 import SargamPractice from './components/SargamPractice';
-import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff, Info, Download, PlusSquare, PlaySquare, Repeat, Repeat1, XSquare, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Upload, Music, Mic2, Activity, Waves, Settings, Music2, Bug, Maximize2, Minimize2, Play, Pause, Rewind, FastForward, ZoomIn, ZoomOut, Flag, Trash2, PlayCircle, Pin, PinOff, Mic, MicOff, Info, Download, PlusSquare, PlaySquare, Repeat, Repeat1, XSquare, ArrowLeft, ArrowRight, Link as LinkIcon, Loader2, Youtube } from 'lucide-react';
 import { YIN } from 'pitchfinder';
 
 // Sargam Mapping Helpers
@@ -29,6 +29,12 @@ function App() {
   const [isLiveMicEnabled, setIsLiveMicEnabled] = useState(false);
   const [showPitchGuide, setShowPitchGuide] = useState(false);
   const [showSargamPractice, setShowSargamPractice] = useState(false);
+
+  // YouTube Link State
+  const [inputMode, setInputMode] = useState('upload'); // 'upload' or 'link'
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractError, setExtractError] = useState(null);
 
   const playerRef = useRef(null);
   const visualizerContainerRef = useRef(null);
@@ -137,6 +143,58 @@ function App() {
       setCurrentNote(null);
     }
   };
+
+  const handleExtractYoutube = async () => {
+    if (!youtubeUrl.trim()) return;
+    setExtractError(null);
+    setIsExtracting(true);
+
+    try {
+      const res = await fetch('/api/extract-audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: youtubeUrl.trim() }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || `Server error (${res.status})`);
+      }
+
+      const blob = await res.blob();
+      const ext = res.headers.get('Content-Type')?.includes('mp4') ? 'mp4' : 'webm';
+      const contentDisp = res.headers.get('Content-Disposition') || '';
+      const filenameMatch = contentDisp.match(/filename="?([^";\n]+)"?/);
+      const title = filenameMatch ? filenameMatch[1] : `youtube-audio.${ext}`;
+
+      const file = new File([blob], title, { type: blob.type || `audio/${ext}` });
+
+      setAudioFile(file);
+      setFileName(title);
+      setIsPlaying(false);
+      setCurrentNote(null);
+      setYoutubeUrl('');
+      setInputMode('upload');
+    } catch (err) {
+      console.error('YouTube extraction failed:', err);
+      setExtractError(err.message || 'Failed to extract audio');
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  const handleCleanup = useCallback(async () => {
+    try {
+      await fetch('/api/cleanup', { method: 'DELETE', keepalive: true });
+    } catch (e) { void e; }
+  }, []);
+
+  // Cleanup temp files on app close
+  useEffect(() => {
+    const handler = () => handleCleanup();
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [handleCleanup]);
 
   const togglePlay = () => {
     // If we're in sequence mode, exit it so normal playback resumes freely
@@ -602,15 +660,22 @@ function App() {
             </button>
           </div>
 
-          <label className="cursor-pointer group">
-            <input type="file" accept="audio/*" onChange={handleFileChange} className="hidden" />
-            <div className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg transition group-hover:border-indigo-500/50">
-              <Upload size={18} className="text-gray-400 group-hover:text-indigo-400 transition" />
-              <span className="text-sm font-medium text-gray-300 group-hover:text-white transition">
-                {fileName ? 'Change Song' : 'Upload Song'}
-              </span>
-            </div>
-          </label>
+          <div className="flex items-center gap-2">
+            <label className="cursor-pointer group">
+              <input type="file" accept="audio/*" onChange={handleFileChange} className="hidden" />
+              <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg transition group-hover:border-indigo-500/50">
+                <Upload size={16} className="text-gray-400 group-hover:text-indigo-400 transition" />
+                <span className="text-xs font-medium text-gray-400 group-hover:text-white transition hidden sm:inline">Upload</span>
+              </div>
+            </label>
+            <button
+              onClick={() => { setInputMode('link'); setAudioFile(null); setExtractError(null); document.getElementById('youtube-input-header')?.focus(); }}
+              className="flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg transition hover:border-red-500/50 group"
+            >
+              <Youtube size={16} className="text-gray-400 group-hover:text-red-400 transition" />
+              <span className="text-xs font-medium text-gray-400 group-hover:text-white transition hidden sm:inline">YouTube</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -618,18 +683,94 @@ function App() {
       <main className="max-w-6xl mx-auto p-4 md:p-8 space-y-8">
 
         {!audioFile && (
-          <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-gray-800 rounded-2xl bg-gray-900/50 text-center space-y-4">
+          <div className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-gray-800 rounded-2xl bg-gray-900/50 text-center space-y-6">
             <div className="p-6 bg-gray-800 rounded-full animate-pulse">
               <Music size={48} className="text-gray-600" />
             </div>
             <h2 className="text-2xl font-bold text-gray-700">No Song Loaded</h2>
             <p className="text-gray-500 max-w-md">
-              Upload a vocal track to start practicing. See waveforms, spectrograms, and real-time notes.
+              Upload a vocal track or paste a YouTube link to start practicing.
             </p>
-            <label className="cursor-pointer px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-lg shadow-indigo-500/20 transition transform hover:scale-105 active:scale-95">
-              Select Audio File
-              <input type="file" accept="audio/*" onChange={handleFileChange} className="hidden" />
-            </label>
+
+            {/* Tab Switcher */}
+            <div className="flex items-center bg-gray-800 rounded-xl p-1 border border-gray-700">
+              <button
+                onClick={() => { setInputMode('upload'); setExtractError(null); }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${inputMode === 'upload' ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
+              >
+                <Upload size={16} />
+                Upload File
+              </button>
+              <button
+                onClick={() => { setInputMode('link'); setExtractError(null); }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${inputMode === 'link' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
+              >
+                <Youtube size={16} />
+                Paste Link
+              </button>
+            </div>
+
+            {/* Upload Mode */}
+            {inputMode === 'upload' && (
+              <label className="cursor-pointer px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-lg shadow-indigo-500/20 transition transform hover:scale-105 active:scale-95">
+                Select Audio File
+                <input type="file" accept="audio/*" onChange={handleFileChange} className="hidden" />
+              </label>
+            )}
+
+            {/* Paste Link Mode */}
+            {inputMode === 'link' && (
+              <div className="w-full max-w-md space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 relative">
+                    <input
+                      type="url"
+                      value={youtubeUrl}
+                      onChange={(e) => { setYoutubeUrl(e.target.value); setExtractError(null); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleExtractYoutube(); }}
+                      placeholder="Paste YouTube link here..."
+                      disabled={isExtracting}
+                      className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 transition disabled:opacity-50"
+                    />
+                    {youtubeUrl && !isExtracting && (
+                      <button
+                        onClick={() => { setYoutubeUrl(''); setExtractError(null); }}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition"
+                      >
+                        <XSquare size={16} />
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleExtractYoutube}
+                    disabled={isExtracting || !youtubeUrl.trim()}
+                    className={`px-5 py-3 rounded-xl font-semibold text-white transition shadow-lg flex items-center gap-2 ${isExtracting || !youtubeUrl.trim() ? 'bg-gray-700 cursor-not-allowed opacity-50' : 'bg-red-600 hover:bg-red-700 shadow-red-500/20'}`}
+                  >
+                    {isExtracting ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" />
+                        Extracting...
+                      </>
+                    ) : (
+                      <>
+                        <LinkIcon size={18} />
+                        Extract
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {extractError && (
+                  <div className="px-4 py-2 bg-red-900/30 border border-red-500/50 rounded-lg text-red-300 text-sm">
+                    {extractError}
+                  </div>
+                )}
+
+                <p className="text-xs text-gray-600">
+                  Supports any public YouTube video or Shorts link
+                </p>
+              </div>
+            )}
           </div>
         )}
 
