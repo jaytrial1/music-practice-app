@@ -1,0 +1,14 @@
+{
+  "name": "music-practice-backend",
+  "version": "1.0.0",
+  "description": "YouTube audio extraction backend for Vocal Practice Pro",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "cors": "^2.8.5"
+  }
+}
