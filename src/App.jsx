@@ -158,7 +158,7 @@ function App() {
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        throw new Error(data?.error || `Server error (${res.status})`);
+        throw new Error(data?.debug || data?.error || `Server error (${res.status})`);
       }
 
       const blob = await res.blob();

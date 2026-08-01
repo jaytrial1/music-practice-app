@@ -297,6 +297,7 @@ export default async function handler(req, res) {
     res.end();
   } catch (err) {
     console.error("YouTube extraction failed:", err.message);
+    console.error("Full error:", err.stack);
 
     let message = "Failed to extract audio. Please check the URL and try again.";
     if (err.message.includes("unavailable")) {
@@ -309,6 +310,7 @@ export default async function handler(req, res) {
       message = "Could not decode audio stream. YouTube may have changed their player.";
     }
 
-    return res.status(500).json({ error: message });
+    // In debug mode, return full error details
+    return res.status(500).json({ error: message, debug: err.message });
   }
 }
