@@ -48,6 +48,8 @@ const AudioPlayer = forwardRef(({
     const [error, setError] = useState(null);
     const [pitchData, setPitchData] = useState([]);
     const [decodingDuration, setDecodingDuration] = useState(0);
+    const [pythonNotes, setPythonNotes] = useState(null);
+    const [isAnalyzingAI, setIsAnalyzingAI] = useState(false);
 
     // Keep the ref in sync with the latest prop on every render
     useEffect(() => {
@@ -458,14 +460,53 @@ const AudioPlayer = forwardRef(({
     // Analyze Algorithm (File Upload)
     const analyzePitch = async (buffer) => {
         try {
-            console.log("Analyzing File Pitch...");
+            console.log("Analyzing File Pitch locally for quick UI...");
             const { pitches, segments } = processBufferToSegments(buffer);
 
             setPitchData(pitches);
             setDecodingDuration(buffer.duration);
             setPitchSegments(segments);
 
-            console.log("Pitch analysis complete. Frames:", segments.length);
+            console.log("Local JS Pitch analysis complete. Frames:", segments.length);
+
+            // Trigger Heavy AI Analysis
+            if (audioFile) {
+                setIsAnalyzingAI(true);
+                try {
+                    let formData = new FormData();
+                    if (typeof audioFile === 'string') {
+                        const response = await fetch(audioFile);
+                        const blob = await response.blob();
+                        formData.append('audio', blob, 'audio.mp3');
+                    } else if (audioFile instanceof File || audioFile instanceof Blob) {
+                        formData.append('audio', audioFile);
+                    }
+                    if (rootKey) formData.append('scale', rootKey);
+                    
+                    console.log("Sending trace to Python notation engine...");
+                    const res = await fetch('http://localhost:5000/analyze', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (!res.ok) throw new Error("Failed to reach AI Backend");
+                    const data = await res.json();
+                    
+                    if (data.phrases) {
+                        let allNotes = [];
+                        Object.values(data.phrases).forEach(phrase => {
+                             allNotes.push(...phrase);
+                        });
+                        setPythonNotes(allNotes);
+                        console.log(`Loaded High-Quality AI notation: ${allNotes.length} notes.`);
+                    }
+                } catch (apiErr) {
+                    console.error("AI Analysis skipped, falling back to basic JS tracking:", apiErr);
+                } finally {
+                    setIsAnalyzingAI(false);
+                }
+            }
+
         } catch (e) {
             console.error("Pitch analysis failed:", e);
         }
@@ -494,13 +535,11 @@ const AudioPlayer = forwardRef(({
                 console.log(`Normalized with gain: ${gain.toFixed(2)}x`);
             }
 
-            // 2. DETECT PITCH — same accuracy as file analysis + overlap for more data
-            // threshold=0.15 (slightly more lenient than file analysis for accuracy)
-            // Keep overlap for density, normalization handles the quiet signal
+            // 2. DETECT PITCH
+            // Use stricter threshold: 0.1 for more accurate confidence
             const detectPitch = YIN({
                 sampleRate: buffer.sampleRate,
-                threshold: 0.15,
-                probabilityThreshold: 0.05
+                threshold: 0.1
             });
             const windowSize = 2048;  // Reliable for YIN
             const hopSize = 512;      // 4x overlap = 4x more data points
@@ -514,6 +553,35 @@ const AudioPlayer = forwardRef(({
             }
 
             console.log(`Total frames: ${pitches.length}`);
+
+            // --- OCTAVE ERROR CORRECTION ---
+            const WINDOW = 5; 
+            const OCT_LO = 1.85;
+            const OCT_HI = 2.15;
+            
+            for (let i = 0; i < pitches.length; i++) {
+                if (!pitches[i].freq || pitches[i].freq < 60 || pitches[i].freq > 1100) continue;
+                
+                const neighbors = [];
+                for (let j = Math.max(0, i - WINDOW); j <= Math.min(pitches.length - 1, i + WINDOW); j++) {
+                    if (j === i) continue;
+                    if (pitches[j].freq && pitches[j].freq >= 60 && pitches[j].freq <= 1100) {
+                        neighbors.push(pitches[j].freq);
+                    }
+                }
+                if (neighbors.length < 2) continue; // Not enough context
+                
+                neighbors.sort((a, b) => a - b);
+                const median = neighbors[Math.floor(neighbors.length / 2)];
+                const ratio = pitches[i].freq / median;
+                
+                if (ratio >= OCT_LO && ratio <= OCT_HI) {
+                    pitches[i].freq /= 2; // correct down
+                } else if (ratio >= 1 / OCT_HI && ratio <= 1 / OCT_LO) {
+                    pitches[i].freq *= 2; // correct up
+                }
+            }
+
             const validCount = pitches.filter(p => p.freq && p.freq > 50 && p.freq < 1200).length;
             console.log(`Valid detections: ${validCount} (${(validCount / pitches.length * 100).toFixed(1)}%)`)
 
@@ -532,24 +600,29 @@ const AudioPlayer = forwardRef(({
             // 4. MEDIAN FILTER — remove spike outliers
             const smoothedSegments = [];
             for (let i = 0; i < rawSegments.length; i++) {
-                const prev = i > 0 ? rawSegments[i - 1].freq : rawSegments[i].freq;
-                const curr = rawSegments[i].freq;
-                const next = i < rawSegments.length - 1 ? rawSegments[i + 1].freq : curr;
-                const sorted = [prev, curr, next].sort((a, b) => a - b);
+                // Median of 5 segments for smoother tracking
+                const neighbors = [];
+                for (let j = Math.max(0, i - 2); j <= Math.min(rawSegments.length - 1, i + 2); j++) {
+                    neighbors.push(rawSegments[j].freq);
+                }
+                neighbors.sort((a, b) => a - b);
+                const medianFreq = neighbors[Math.floor(neighbors.length / 2)];
+
                 smoothedSegments.push({
                     ...rawSegments[i],
-                    freq: sorted[1]
+                    freq: medianFreq
                 });
             }
 
-            // 5. FILL GAPS up to 1.5s with interpolation
+            // 5. FILL MICRO-GAPS ONLY (up to 0.1s instead of 1.5s)
+            // This prevents massive diagonal lines connecting distant notes
             const filledSegments = [];
             for (let i = 0; i < smoothedSegments.length; i++) {
                 filledSegments.push(smoothedSegments[i]);
 
                 if (i < smoothedSegments.length - 1) {
                     const gap = smoothedSegments[i + 1].startTime - smoothedSegments[i].endTime;
-                    if (gap > 0 && gap < 1.5) {
+                    if (gap > 0 && gap <= 0.1) {
                         const steps = Math.max(1, Math.round(gap / timePerHop));
                         for (let s = 1; s <= steps; s++) {
                             const t = s / (steps + 1);
@@ -701,6 +774,24 @@ const AudioPlayer = forwardRef(({
 
     // --- UNIFIED LOGIC: Pre-calculate Stable Notes ---
     const stableNotes = useMemo(() => {
+        // High Quality AI Path
+        if (pythonNotes && pythonNotes.length > 0) {
+            return pythonNotes.filter(n => n.type !== 'Uncertain').map(n => {
+                const centerFreq = 440 * Math.pow(2, ((n.midi - 69) / 12));
+                return {
+                    startTime: n.start,
+                    endTime: n.end,
+                    avgFreq: centerFreq,
+                    midi: n.midi,
+                    label: n.note,
+                    fullNote: n.note,
+                    displayLabel: n.note,
+                    type: n.type
+                };
+            });
+        }
+
+        // JS Fallback Path
         if (!pitchSegments.length) return [];
 
         const events = [];
@@ -833,7 +924,7 @@ const AudioPlayer = forwardRef(({
 
     // Pitch Graph Rendering
     useEffect(() => {
-        if (!wavesurferRef.current || !isReady || pitchSegments.length === 0) return;
+        if (!wavesurferRef.current || !isReady || (pitchSegments.length === 0 && !pythonNotes)) return;
 
         const ws = wavesurferRef.current;
         const wrapper = ws.getWrapper();
@@ -912,63 +1003,100 @@ const AudioPlayer = forwardRef(({
             const isAchal = interval === 0 || interval === 7;
             const isVikrut = [1, 3, 6, 8, 10].includes(interval);
 
-            // Base hex: Achal (Blue), Vikrut (Rose), Shuddha (Emerald)
             let baseRgb = isAchal ? [59, 130, 246] : (isVikrut ? [244, 63, 94] : [16, 185, 129]);
 
             if (octave < 4) {
-                // Lower Octave: Much darker
                 baseRgb = baseRgb.map(c => Math.floor(c * 0.4));
             } else if (octave > 4) {
-                // Higher Octave: Pastel / Bright
                 baseRgb = baseRgb.map(c => Math.min(255, Math.floor(c + (255 - c) * 0.6)));
             }
 
             return `rgb(${baseRgb[0]}, ${baseRgb[1]}, ${baseRgb[2]})`;
         };
 
-        ctx.lineWidth = 4;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.shadowBlur = 6;
+        if (pythonNotes && pythonNotes.length > 0) {
+            // --- HIGH QUALITY AI NOTATION RENDER ---
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.shadowBlur = 4;
 
-        let currentPath = [];
-        let allPaths = [];
-        let lastEndTime = -1;
+            pythonNotes.forEach(n => {
+                if (n.type === 'Uncertain') return;
 
-        for (let i = 0; i < pitchSegments.length; i++) {
-            const seg = pitchSegments[i];
-            const x = seg.startTime * pxPerSec;
-            const y = getFreqY(seg.freq, height);
-            const color = getColorForFreq(seg.freq);
+                const startX = n.start * pxPerSec;
+                const endX = n.end * pxPerSec;
+                const centerFreq = 440 * Math.pow(2, ((n.midi - 69) / 12));
+                const noteY = getFreqY(centerFreq, height);
 
-            if (currentPath.length > 0 && (seg.startTime - lastEndTime) < 3.0) {
-                currentPath.push({ x, y, color });
-            } else {
-                if (currentPath.length > 0) allPaths.push(currentPath);
-                currentPath = [{ x, y, color }];
-            }
-            lastEndTime = seg.endTime;
-        }
-        if (currentPath.length > 0) allPaths.push(currentPath);
+                let color = 'rgba(16, 185, 129, 0.9)'; // emerald
+                if (n.type === 'Slide') color = 'rgba(168, 85, 247, 0.9)'; // purple
+                else if (n.type === 'Gamak') color = 'rgba(244, 63, 94, 0.9)'; // rose
+                else if (n.type === 'Un-tuned') color = 'rgba(234, 179, 8, 0.9)'; // yellow
 
-        // Draw segments with dynamic colors instead of a single curve
-        allPaths.forEach(path => {
-            if (path.length < 2) return;
-            for (let i = 0; i < path.length - 1; i++) {
-                const p1 = path[i];
-                const p2 = path[i + 1];
-
-                // Add a small threshold constraint: if delta Y is extremely large unexpectedly, skip drawing the connector
-                if (Math.abs(p2.y - p1.y) > height / 3) continue;
-
+                ctx.strokeStyle = color;
+                ctx.shadowColor = color;
+                
                 ctx.beginPath();
-                ctx.moveTo(p1.x, p1.y);
-                ctx.lineTo(p2.x, p2.y);
-                ctx.strokeStyle = p1.color;
-                ctx.shadowColor = p1.color;
+                ctx.moveTo(startX, noteY);
+                if (n.type === 'Gamak') {
+                    // Wavy oscillation line for Gamak
+                    for (let x = startX; x <= endX; x += 2) {
+                        ctx.lineTo(x, noteY + Math.sin(x * 0.4) * 4);
+                    }
+                } else if (n.type === 'Slide') {
+                    // Straight slightly-tilted line representing Meend slide
+                    ctx.lineTo(endX, noteY - 12); 
+                } else {
+                    ctx.lineTo(endX, noteY);
+                }
                 ctx.stroke();
+            });
+
+        } else {
+            // --- BASIC JS FALLBACK RENDER ---
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.shadowBlur = 6;
+
+            let currentPath = [];
+            let allPaths = [];
+            let lastEndTime = -1;
+
+            for (let i = 0; i < pitchSegments.length; i++) {
+                const seg = pitchSegments[i];
+                const x = seg.startTime * pxPerSec;
+                const y = getFreqY(seg.freq, height);
+                const color = getColorForFreq(seg.freq);
+
+                if (currentPath.length > 0 && (seg.startTime - lastEndTime) < 3.0) {
+                    currentPath.push({ x, y, color });
+                } else {
+                    if (currentPath.length > 0) allPaths.push(currentPath);
+                    currentPath = [{ x, y, color }];
+                }
+                lastEndTime = seg.endTime;
             }
-        });
+            if (currentPath.length > 0) allPaths.push(currentPath);
+
+            allPaths.forEach(path => {
+                if (path.length < 2) return;
+                for (let i = 0; i < path.length - 1; i++) {
+                    const p1 = path[i];
+                    const p2 = path[i + 1];
+
+                    if (Math.abs(p2.y - p1.y) > height / 3) continue;
+
+                    ctx.beginPath();
+                    ctx.moveTo(p1.x, p1.y);
+                    ctx.lineTo(p2.x, p2.y);
+                    ctx.strokeStyle = p1.color;
+                    ctx.shadowColor = p1.color;
+                    ctx.stroke();
+                }
+            });
+        }
 
         // --- 3. DRAW USER PITCH (Recorded - Orange) ---
         if (userPitchSegments && userPitchSegments.length > 0) {
@@ -1081,7 +1209,7 @@ const AudioPlayer = forwardRef(({
             });
         }
 
-    }, [pitchSegments, isReady, zoom, showSpectrogram, showSargam, rootKey, notationMode, stableNotes, userPitchSegments]);
+    }, [pythonNotes, pitchSegments, isReady, zoom, showSpectrogram, showSargam, rootKey, notationMode, stableNotes, userPitchSegments]);
 
     // Watchers guarded by isReady
     useEffect(() => {
@@ -1188,6 +1316,14 @@ const AudioPlayer = forwardRef(({
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900/80 z-10 rounded-xl">
                     <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
                     <span className="text-indigo-300 text-sm font-medium">Processing Audio...</span>
+                </div>
+            )}
+
+            {/* AI Extraction State Loader */}
+            {isReady && isAnalyzingAI && (
+                <div className="absolute top-4 right-4 flex items-center bg-indigo-900/90 px-4 py-2 rounded-lg border border-indigo-400/50 shadow-xl z-20">
+                    <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin mr-3"></div>
+                    <span className="text-indigo-100 font-semibold uppercase text-xs tracking-wider">Extracting AI Notation...</span>
                 </div>
             )}
 

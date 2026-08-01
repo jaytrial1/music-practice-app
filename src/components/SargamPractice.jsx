@@ -104,7 +104,7 @@ const SargamPractice = ({ onClose }) => {
 
                 const scriptNode = audioCtx.createScriptProcessor(2048, 1, 1);
                 scriptNodeRef.current = scriptNode;
-                const detectPitch = YIN({ sampleRate: audioCtx.sampleRate, threshold: 0.15, probabilityThreshold: 0.05 });
+                const detectPitch = YIN({ sampleRate: audioCtx.sampleRate, threshold: 0.1 }); // Stricter threshold for accuracy
 
                 gainNode.connect(scriptNode);
                 scriptNode.connect(audioCtx.destination);
@@ -124,7 +124,21 @@ const SargamPractice = ({ onClose }) => {
                         const frequency = detectPitch(inputBuffer);
                         if (frequency && frequency > 50 && frequency < 1200) {
                             recentFreqs.push(frequency);
-                            if (recentFreqs.length > 3) recentFreqs.shift();
+                            if (recentFreqs.length > 5) recentFreqs.shift(); // Smoother median over 5 frames
+                            
+                            // Simple octave jump rejection for steady drones like "OM"
+                            // If the new raw frequency is ~double or ~half the median of previous frames, ignore it
+                            let correctedFreq = frequency;
+                            if (recentFreqs.length >= 3) {
+                                const prevSorted = [...recentFreqs.slice(0, -1)].sort((a, b) => a - b);
+                                const prevMedian = prevSorted[Math.floor(prevSorted.length / 2)];
+                                const ratio = frequency / prevMedian;
+                                if (ratio > 1.85 && ratio < 2.15) correctedFreq /= 2;
+                                else if (ratio > 0.45 && ratio < 0.55) correctedFreq *= 2;
+                            }
+                            
+                            recentFreqs[recentFreqs.length - 1] = correctedFreq;
+
                             const sorted = [...recentFreqs].sort((a, b) => a - b);
                             const median = sorted[Math.floor(sorted.length / 2)];
                             const interval = freqToInterval(median);

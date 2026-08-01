@@ -25,3 +25,7 @@ dist-ssr
 
 # Server temp files
 server/temp/
+
+# ytdl-core debug files
+*-player-script.js
+nul
