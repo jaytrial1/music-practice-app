@@ -1,5 +1,4 @@
-// YouTube Audio Extraction — pure fetch, no binaries
-// Handles signatureCipher decryption for Vercel serverless
+// YouTube Audio Extraction — works on Vercel serverless
 
 function isValidYouTubeUrl(url) {
   return /^https?:\/\/(www\.)?(youtube\.com\/(watch|shorts)|youtu\.be\/)/.test(url);
@@ -12,108 +11,65 @@ function extractVideoId(url) {
   return match ? match[1] : null;
 }
 
-// --- Signature Cipher Decryption ---
-function extractNTransformFunction(jsSource) {
-  const match = jsSource.match(
-    /\b([a-zA-Z0-9$]+)\s*=\s*function\(\s*a\s*\)\s*\{\s*var\s+b\s*=\s*a\.split\(\s*""\s*\)/
+// --- Signature Decipher ---
+function extractDecipherAndNTransform(jsSource) {
+  // Extract the main decipher function name
+  const mainMatch = jsSource.match(
+    /\b([a-zA-Z0-9$]+)\s*=\s*function\(\s*a\s*\)\s*\{\s*a\s*=\s*a\.split\(\s*""\s*\)\s*;\s*[a-zA-Z0-9$]+\.[a-zA-Z0-9$]+\s*\(/
   );
-  if (!match) return null;
+  if (!mainMatch) return { decipherFn: null, nTransformFn: null };
+  const mainName = mainMatch[1];
 
-  const funcName = match[1];
-  const funcBody = jsSource.substring(
-    jsSource.indexOf(`${funcName}=`),
-    jsSource.indexOf(`};`, jsSource.indexOf(`${funcName}=`)) + 2
+  // Find helper object
+  const helperMatch = jsSource.match(
+    new RegExp(`var\\s+([a-zA-Z0-9$]+)\\s*=\\s*\\{`)
   );
-
-  const helperMatch = funcBody.match(
-    /var\s+b\s*=.*?;\s*var\s+([a-zA-Z0-9$]+)\s*=\s*\{[\s\S]*?\}\s*\)\s*;/
-  );
-  if (!helperMatch) return null;
-
+  if (!helperMatch) return { decipherFn: null, nTransformFn: null };
   const helperName = helperMatch[1];
-  const helperBlock = jsSource.substring(
-    jsSource.indexOf(`${helperName}={`),
-    jsSource.indexOf(`}`, jsSource.indexOf(`${helperName}={`)) + 1
-  );
 
-  const objectMatch = helperBlock.match(
-    /([a-zA-Z0-9$]+)\s*:\s*function\(\s*a(?:\s*,\s*b)?\s*\)\s*\{\s*(?:a\s*=\s*(?:a\.split\(\s*""\s*\)|\[.*?\])[\s\S]*?return\s+a\.join\(\s*""\s*\))\s*\}/g
-  );
-  if (!objectMatch) return null;
+  // Extract all methods from the helper object
+  const helperStart = jsSource.indexOf(`${helperName}={`);
+  if (helperStart === -1) return { decipherFn: null, nTransformFn: null };
 
-  const transformMap = {};
-  for (const fn of objectMatch) {
-    const key = fn.split(":")[0].trim();
-    const transformType = fn.includes("reverse") ? "reverse" :
-      fn.includes("splice") ? "splice" : "swap";
-    const swapMatch = fn.match(/var\s+c\s*=\s*a\.(\w+)\s*;\s*a\.\1\s*=\s*a\.(\w+)\s*;\s*a\.\2\s*=\s*c/);
-    const swapIndex = transformType === "swap" && swapMatch ? parseInt(swapMatch[1].replace(/\D/g, "")) || 0 : 0;
-    transformMap[key] = { type: transformType, index: swapIndex };
+  let braceCount = 0;
+  let helperEnd = helperStart;
+  for (let i = helperStart; i < jsSource.length; i++) {
+    if (jsSource[i] === "{") braceCount++;
+    if (jsSource[i] === "}") braceCount--;
+    if (braceCount === 0) { helperEnd = i + 1; break; }
+  }
+  const helperBlock = jsSource.substring(helperStart, helperEnd);
+
+  // Parse each method: reverse, splice, swap
+  const methods = {};
+  const methodRegex = /([a-zA-Z0-9$]+)\s*:\s*function\(\s*a(?:\s*,\s*b)?\s*\)\s*\{([^}]+)\}/g;
+  let mm;
+  while ((mm = methodRegex.exec(helperBlock)) !== null) {
+    const body = mm[2];
+    if (body.includes(".reverse()")) methods[mm[1]] = "reverse";
+    else if (body.includes(".splice(")) methods[mm[1]] = "splice";
+    else if (body.includes("var c=") || body.includes("var c =")) methods[mm[1]] = "swap";
   }
 
-  return (sig) => {
-    let arr = sig.split("");
-    for (const key of funcName.match(/\$[a-zA-Z0-9]+/g) || []) {
-      const op = transformMap[key];
-      if (!op) continue;
-      if (op.type === "reverse") arr.reverse();
-      else if (op.type === "splice") arr.splice(0, op.index);
-      else if (op.type === "swap") {
-        const idx = op.index % arr.length;
-        [arr[0], arr[idx]] = [arr[idx], arr[0]];
-      }
-    }
-    return arr.join("");
-  };
-}
-
-function extractDecipherFunction(jsSource) {
-  const funcMatch = jsSource.match(
-    /\b([a-zA-Z0-9$]+)\s*=\s*function\(\s*a\s*\)\s*\{\s*a\s*=\s*a\.split\(\s*""\s*\)\s*;\s*([a-zA-Z0-9$]+)\.[a-zA-Z0-9$]+\s*\(/
+  // Extract the main function body (the one that chains calls)
+  const mainFuncRegex = new RegExp(
+    `function\\s+${mainName.replace(/\$/g, "\\$")}\\s*\\(\\s*a\\s*\\)\\s*\\{[^}]*a\\.split\\(\\s*""\\s*\\)[^}]*\\}`
   );
-  if (!funcMatch) return null;
+  const mainBodyMatch = jsSource.match(mainFuncRegex);
+  if (!mainBodyMatch) return { decipherFn: null, nTransformFn: null };
 
-  const mainFuncName = funcMatch[1];
-  const helperName = funcMatch[2];
-
-  const helperBlockMatch = jsSource.match(
-    new RegExp(
-      `var\\s+${helperName.replace(/\$/g, "\\$")}\\s*=\\s*\\{([\\s\\S]*?)\\}\\s*\\]\\s*;`
-    )
-  );
-  if (!helperBlockMatch) return null;
-
-  const block = helperBlockMatch[1];
-  const funcRegex = /([a-zA-Z0-9$]+)\s*:\s*function\(\s*a(?:\s*,\s*b)?\s*\)\s*\{[^}]*\}/g;
-  const transformMap = {};
-  let m;
-
-  while ((m = funcRegex.exec(block)) !== null) {
-    const key = m[1];
-    const body = m[0];
-    if (body.includes("reverse")) transformMap[key] = "reverse";
-    else if (body.includes("splice")) transformMap[key] = "splice";
-    else if (body.includes("var c=") || body.includes("var c =")) transformMap[key] = "swap";
-  }
-
-  const mainFuncMatch = jsSource.match(
-    new RegExp(
-      `function\\s+${mainFuncName.replace(/\$/g, "\\$")}\\s*\\(\\s*a\\s*\\)\\s*\\{[^}]*var\\s+c\\s*=\\s*a\\.split\\(\\s*""\\s*\\)\\s*;\\s*([\\s\\S]*?)return\\s+c\\.join\\(\\s*""\\s*\\)\\s*\\}`
-    )
-  );
-  if (!mainFuncMatch) return null;
-
+  const body = mainBodyMatch[0];
   const steps = [];
-  const stepRegex = /([a-zA-Z0-9$]+)\.[a-zA-Z0-9$]+\s*\(c\s*,\s*(\d+)\)/g;
+  const stepRegex = /([a-zA-Z0-9$]+)\.[a-zA-Z0-9$]+\s*\(\s*a\s*,\s*(\d+)\s*\)/g;
   let sm;
-  while ((sm = stepRegex.exec(mainFuncMatch[1])) !== null) {
-    steps.push({ fn: sm[1], arg: parseInt(sm[2]) });
+  while ((sm = stepRegex.exec(body)) !== null) {
+    steps.push({ method: sm[1], arg: parseInt(sm[2]) });
   }
 
-  return (sig) => {
+  const decipherFn = (sig) => {
     let arr = sig.split("");
     for (const step of steps) {
-      const op = transformMap[step.fn];
+      const op = methods[step.method];
       if (op === "reverse") arr.reverse();
       else if (op === "splice") arr.splice(0, step.arg);
       else if (op === "swap") {
@@ -123,131 +79,220 @@ function extractDecipherFunction(jsSource) {
     }
     return arr.join("");
   };
-}
 
-function decipherSignature(signatureCipher, decipherFn) {
-  const params = new URLSearchParams(signatureCipher);
-  const sig = params.get("s");
-  if (!sig || !decipherFn) return null;
-  const deciphered = decipherFn(sig);
-  const url = params.get("url");
-  if (!url) return null;
-  return url + "&sig=" + encodeURIComponent(deciphered);
-}
+  // N-transform function (throttle bypass)
+  const nMatch = jsSource.match(
+    /\b([a-zA-Z0-9$]+)\s*=\s*function\(\s*a\s*\)\s*\{\s*var\s+b\s*=\s*a\.split\(\s*""\s*\)/
+  );
+  let nTransformFn = null;
+  if (nMatch) {
+    const nName = nMatch[1];
+    // Find the object with transform methods
+    const nObjRegex = new RegExp(
+      `var\\s+([a-zA-Z0-9$]+)\\s*=\\s*\\{[\\s\\S]*?${nName.replace(/\$/g, "\\$")}[\\s\\S]*?\\}\\s*\\]\\s*;`
+    );
+    const nObjMatch = jsSource.match(nObjRegex);
+    if (nObjMatch) {
+      const nObjBlock = nObjMatch[0];
+      const nMethods = {};
+      let nm;
+      const nMethodRegex = /([a-zA-Z0-9$]+)\s*:\s*function\(\s*a(?:\s*,\s*b)?\s*\)\s*\{([^}]+)\}/g;
+      while ((nm = nMethodRegex.exec(nObjBlock)) !== null) {
+        const body = nm[2];
+        if (body.includes(".reverse()")) nMethods[nm[1]] = "reverse";
+        else if (body.includes(".splice(")) nMethods[nm[1]] = "splice";
+        else if (body.includes("var c=")) nMethods[nm[1]] = "swap";
+      }
 
-function applyNTransform(url, transformFn) {
-  if (!transformFn) return url;
-  try {
-    const parsed = new URL(url);
-    const n = parsed.searchParams.get("n");
-    if (!n) return url;
-    parsed.searchParams.set("n", transformFn(n));
-    return parsed.toString();
-  } catch {
-    return url;
+      const nFuncRegex = new RegExp(
+        `function\\s+${nName.replace(/\$/g, "\\$")}\\s*\\(\\s*a\\s*\\)\\s*\\{[\\s\\S]*?return\\s+a\\.join\\(\\s*""\\s*\\)\\s*\\}`
+      );
+      const nFuncMatch = jsSource.match(nFuncRegex);
+      if (nFuncMatch) {
+        const nSteps = [];
+        const nStepRegex = /([a-zA-Z0-9$]+)\.[a-zA-Z0-9$]+\s*\(\s*a\s*,\s*(\d+)\s*\)/g;
+        let nsm;
+        while ((nsm = nStepRegex.exec(nFuncMatch[0])) !== null) {
+          nSteps.push({ method: nsm[1], arg: parseInt(nsm[2]) });
+        }
+
+        nTransformFn = (n) => {
+          let arr = n.split("");
+          for (const step of nSteps) {
+            const op = nMethods[step.method];
+            if (op === "reverse") arr.reverse();
+            else if (op === "splice") arr.splice(0, step.arg);
+            else if (op === "swap") {
+              const idx = step.arg % arr.length;
+              [arr[0], arr[idx]] = [arr[idx], arr[0]];
+            }
+          }
+          return arr.join("");
+        };
+      }
+    }
   }
+
+  return { decipherFn, nTransformFn };
 }
 
-// --- Player JS Caching ---
-let cachedPlayerJsUrl = null;
 let cachedDecipherFn = null;
 let cachedNTransformFn = null;
 
-async function getPlayerJsUrl() {
+async function ensureDecipherFunctions() {
+  if (cachedDecipherFn) return;
   const res = await fetch("https://www.youtube.com/watch?v=dQw4w9WgXcQ", {
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
       "Accept-Language": "en-US,en;q=0.9",
+      Cookie: "CONSENT=YES+1",
     },
   });
   const html = await res.text();
-  const match = html.match(/"jsUrl"\s*:\s*"([^"]+)"/);
-  if (!match) throw new Error("Could not find player JS URL");
-  return match[1].startsWith("http")
-    ? match[1]
-    : `https://www.youtube.com${match[1]}`;
+  const jsMatch = html.match(/"jsUrl"\s*:\s*"([^"]+)"/);
+  if (!jsMatch) throw new Error("Could not find player JS URL");
+  const jsUrl = jsMatch[1].startsWith("http") ? jsMatch[1] : `https://www.youtube.com${jsMatch[1]}`;
+  const jsRes = await fetch(jsUrl);
+  const jsSource = await jsRes.text();
+  const { decipherFn, nTransformFn } = extractDecipherAndNTransform(jsSource);
+  cachedDecipherFn = decipherFn;
+  cachedNTransformFn = nTransformFn;
 }
 
-async function getPlayerFunctions() {
-  if (cachedDecipherFn && cachedNTransformFn) {
-    return { decipherFn: cachedDecipherFn, nTransformFn: cachedNTransformFn };
+function decipherUrl(signatureCipher) {
+  const params = new URLSearchParams(signatureCipher);
+  const sig = params.get("s");
+  const url = params.get("url");
+  if (!sig || !url || !cachedDecipherFn) return null;
+  const deciphered = cachedDecipherFn(sig);
+  return url + "&sig=" + encodeURIComponent(deciphered);
+}
+
+function applyNTransform(url) {
+  if (!cachedNTransformFn || !url) return url;
+  try {
+    const parsed = new URL(url);
+    const n = parsed.searchParams.get("n");
+    if (n) parsed.searchParams.set("n", cachedNTransformFn(n));
+    return parsed.toString();
+  } catch { return url; }
+}
+
+// --- Fetch video info via innertube API ---
+async function fetchViaInnertube(videoId) {
+  const clients = [
+    { name: "ANDROID", version: "19.29.37", apiKey: "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w", ua: "com.google.android.youtube/19.29.37 (Linux; U; Android 13; en_US) gzip" },
+    { name: "TVHTML5_SIMPLY_EMBEDDED_PLAYER", version: "2.0", apiKey: "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8" },
+    { name: "IOS", version: "19.29.1", apiKey: "AIzaSyB-63vPrdThhKuerbB2N_l7Kwwcxj6yUAc", ua: "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)" },
+  ];
+
+  for (const client of clients) {
+    try {
+      const res = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${client.apiKey}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(client.ua ? { "User-Agent": client.ua } : {}),
+        },
+        body: JSON.stringify({
+          context: { client: { clientName: client.name, clientVersion: client.version } },
+          videoId,
+          contentCheckOk: true,
+          racyCheckOk: true,
+        }),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data.playabilityStatus?.status === "OK") return data;
+    } catch { continue; }
   }
-
-  const jsUrl = await getPlayerJsUrl();
-  const res = await fetch(jsUrl);
-  const jsSource = await res.text();
-
-  cachedPlayerJsUrl = jsUrl;
-  cachedDecipherFn = extractDecipherFunction(jsSource);
-  cachedNTransformFn = extractNTransformFunction(jsSource);
-
-  return { decipherFn: cachedDecipherFn, nTransformFn: cachedNTransformFn };
+  return null;
 }
 
-// --- Video Info Fetching ---
-async function getVideoInfo(videoId) {
-  const res = await fetch(
-    `https://www.youtube.com/watch?v=${videoId}`,
-    {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-        Cookie: "CONSENT=YES+1",
-      },
-    }
-  );
-
+// --- Fetch video info via watch page scraping ---
+async function fetchViaWatchPage(videoId) {
+  const res = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept-Language": "en-US,en;q=0.9",
+      Cookie: "CONSENT=YES+1",
+    },
+  });
   const html = await res.text();
 
-  // Extract ytInitialPlayerResponse
-  const match = html.match(/var\s+ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;\s*(?:var|<)/s);
-  if (!match) {
-    throw new Error("Could not parse YouTube page");
+  // Try multiple regex patterns for ytInitialPlayerResponse
+  const patterns = [
+    /var\s+ytInitialPlayerResponse\s*=\s*(\{.+?\})\s*;\s*var\s/s,
+    /var\s+ytInitialPlayerResponse\s*=\s*(\{[\s\S]+?\})\s*;\s*</,
+    /ytInitialPlayerResponse\s*=\s*(\{[\s\S]+?\})\s*;/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match) {
+      try {
+        const parsed = JSON.parse(match[1]);
+        if (parsed?.streamingData) return parsed;
+      } catch { continue; }
+    }
   }
-
-  return JSON.parse(match[1]);
+  return null;
 }
 
-function chooseAudioFormat(formats) {
-  const audioFormats = formats.filter(
-    (f) => f.mimeType && f.mimeType.startsWith("audio/")
-  );
-  if (audioFormats.length === 0) return null;
-  audioFormats.sort((a, b) => (b.averageBitrate || 0) - (a.averageBitrate || 0));
-  return audioFormats[0];
+// --- Choose best audio format ---
+function getAudioFormats(info) {
+  const formats = [
+    ...(info.streamingData?.formats || []),
+    ...(info.streamingData?.adaptiveFormats || []),
+  ];
+  return formats.filter((f) => f.mimeType && f.mimeType.startsWith("audio/"));
 }
 
-// --- Main Extraction ---
 async function extractAudio(url) {
   const videoId = extractVideoId(url);
   if (!videoId) throw new Error("Could not extract video ID from URL");
 
-  const info = await getVideoInfo(videoId);
+  // Ensure we have decipher functions ready
+  await ensureDecipherFunctions();
 
-  const title = info.videoDetails?.title || "audio";
-  const formats = info.streamingData?.formats || [];
-  const adaptiveFormats = info.streamingData?.adaptiveFormats || [];
-  const allFormats = [...formats, ...adaptiveFormats];
+  // Try innertube API first
+  const innertubeData = await fetchViaInnertube(videoId);
+  if (innertubeData) {
+    const audioFormats = getAudioFormats(innertubeData);
+    const title = innertubeData.videoDetails?.title || "audio";
 
-  const audioFormat = chooseAudioFormat(allFormats);
-  if (!audioFormat) {
-    throw new Error("No audio format available for this video");
+    for (const fmt of audioFormats.sort((a, b) => (b.averageBitrate || 0) - (a.averageBitrate || 0))) {
+      if (fmt.url) {
+        return { audioUrl: applyNTransform(fmt.url), title, contentType: fmt.mimeType, ext: fmt.mimeType?.includes("mp4") ? "mp4" : "webm" };
+      }
+      if (fmt.signatureCipher) {
+        let audioUrl = decipherUrl(fmt.signatureCipher);
+        if (audioUrl) {
+          audioUrl = applyNTransform(audioUrl);
+          return { audioUrl, title, contentType: fmt.mimeType, ext: fmt.mimeType?.includes("mp4") ? "mp4" : "webm" };
+        }
+      }
+    }
   }
 
-  // Try direct URL first
-  if (audioFormat.url) {
-    return { audioUrl: audioFormat.url, title, contentType: audioFormat.mimeType || "audio/webm", ext: audioFormat.mimeType?.includes("mp4") ? "mp4" : "webm" };
-  }
+  // Fallback: watch page scraping
+  const watchData = await fetchViaWatchPage(videoId);
+  if (watchData) {
+    const audioFormats = getAudioFormats(watchData);
+    const title = watchData.videoDetails?.title || "audio";
 
-  // Need to decipher signatureCipher
-  if (audioFormat.signatureCipher) {
-    const { decipherFn, nTransformFn } = await getPlayerFunctions();
-    let audioUrl = decipherSignature(audioFormat.signatureCipher, decipherFn);
-    if (!audioUrl) throw new Error("Failed to decipher audio URL");
-    audioUrl = applyNTransform(audioUrl, nTransformFn);
-    return { audioUrl, title, contentType: audioFormat.mimeType || "audio/webm", ext: audioFormat.mimeType?.includes("mp4") ? "mp4" : "webm" };
+    for (const fmt of audioFormats.sort((a, b) => (b.averageBitrate || 0) - (a.averageBitrate || 0))) {
+      if (fmt.url) {
+        return { audioUrl: applyNTransform(fmt.url), title, contentType: fmt.mimeType, ext: fmt.mimeType?.includes("mp4") ? "mp4" : "webm" };
+      }
+      if (fmt.signatureCipher) {
+        let audioUrl = decipherUrl(fmt.signatureCipher);
+        if (audioUrl) {
+          audioUrl = applyNTransform(audioUrl);
+          return { audioUrl, title, contentType: fmt.mimeType, ext: fmt.mimeType?.includes("mp4") ? "mp4" : "webm" };
+        }
+      }
+    }
   }
 
   throw new Error("No audio format available for this video");
@@ -271,16 +316,13 @@ export default async function handler(req, res) {
 
     const audioRes = await fetch(audioUrl, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         Referer: "https://www.youtube.com/",
         Origin: "https://www.youtube.com",
       },
     });
 
-    if (!audioRes.ok) {
-      throw new Error(`Failed to fetch audio stream (${audioRes.status})`);
-    }
+    if (!audioRes.ok) throw new Error(`Failed to fetch audio stream (${audioRes.status})`);
 
     const safeTitle = title.replace(/[^a-zA-Z0-9-_ ]/g, "").trim() || "audio";
     const filename = `${safeTitle}.${ext}`;
@@ -297,20 +339,6 @@ export default async function handler(req, res) {
     res.end();
   } catch (err) {
     console.error("YouTube extraction failed:", err.message);
-    console.error("Full error:", err.stack);
-
-    let message = "Failed to extract audio. Please check the URL and try again.";
-    if (err.message.includes("unavailable")) {
-      message = "This video is unavailable or region-restricted";
-    } else if (err.message.includes("private")) {
-      message = "This video is private";
-    } else if (err.message.includes("No audio format")) {
-      message = "No audio stream available for this video";
-    } else if (err.message.includes("decipher")) {
-      message = "Could not decode audio stream. YouTube may have changed their player.";
-    }
-
-    // In debug mode, return full error details
-    return res.status(500).json({ error: message, debug: err.message });
+    return res.status(500).json({ error: "Failed to extract audio. Please check the URL and try again.", debug: err.message });
   }
 }
