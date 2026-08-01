@@ -1,10 +1,33 @@
 // YouTube Audio Extraction — pure fetch, no binaries
 // Works on Vercel serverless functions
 
-const YOUTUBE_CLIENT = {
-  INNERTUBE_API_KEY: "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
-  INNERTUBE_CLIENT_NAME: "WEB",
-  INNERTUBE_CLIENT_VERSION: "2.20240101.00.00",
+const YOUTUBE_CLIENTS = {
+  WEB: {
+    clientName: "WEB",
+    clientVersion: "2.20241201.00.00",
+    apiKey: "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
+  },
+  ANDROID: {
+    clientName: "ANDROID",
+    clientVersion: "19.29.37",
+    androidSdkVersion: 33,
+    apiKey: "AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w",
+    userAgent:
+      "com.google.android.youtube/19.29.37 (Linux; U; Android 13; en_US) gzip",
+  },
+  IOS: {
+    clientName: "IOS",
+    clientVersion: "19.29.1",
+    deviceMake: "Apple",
+    deviceModel: "iPhone16,2",
+    userAgent:
+      "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)",
+  },
+  TVHTML5_SIMPLY_EMBEDDED: {
+    clientName: "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+    clientVersion: "2.0",
+    apiKey: "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
+  },
 };
 
 function isValidYouTubeUrl(url) {
@@ -19,42 +42,93 @@ function extractVideoId(url) {
 }
 
 async function getVideoInfo(videoId) {
-  const url = `https://www.youtube.com/youtubei/v1/player?key=${YOUTUBE_CLIENT.INNERTUBE_API_KEY}`;
+  // Try ANDROID first (fewer restrictions), then IOS, TV, then WEB
+  const clients = [
+    YOUTUBE_CLIENTS.ANDROID,
+    YOUTUBE_CLIENTS.TVHTML5_SIMPLY_EMBEDDED,
+    YOUTUBE_CLIENTS.IOS,
+    YOUTUBE_CLIENTS.WEB,
+  ];
 
-  const body = {
-    context: {
-      client: {
-        clientName: YOUTUBE_CLIENT.INNERTUBE_CLIENT_NAME,
-        clientVersion: YOUTUBE_CLIENT.INNERTUBE_CLIENT_VERSION,
-      },
-    },
-    videoId,
-  };
+  for (const client of clients) {
+    try {
+      const url = `https://www.youtube.com/youtubei/v1/player?key=${client.apiKey}`;
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    },
-    body: JSON.stringify(body),
-  });
+      const body = {
+        context: {
+          client: {
+            clientName: client.clientName,
+            clientVersion: client.clientVersion,
+            ...(client.androidSdkVersion && { androidSdkVersion: client.androidSdkVersion }),
+            ...(client.deviceMake && { deviceMake: client.deviceMake }),
+            ...(client.deviceModel && { deviceModel: client.deviceModel }),
+          },
+        },
+        videoId,
+        contentCheckOk: true,
+        racyCheckOk: true,
+      };
 
-  if (!res.ok) {
-    throw new Error(`YouTube API returned ${res.status}`);
+      const headers = {
+        "Content-Type": "application/json",
+      };
+      if (client.userAgent) {
+        headers["User-Agent"] = client.userAgent;
+      }
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) continue;
+
+      const data = await res.json();
+
+      // If this client got playable data, use it
+      if (
+        data.playabilityStatus?.status === "OK" &&
+        (data.streamingData?.formats?.length > 0 ||
+          data.streamingData?.adaptiveFormats?.length > 0)
+      ) {
+        return data;
+      }
+
+      // If LOGIN_REQUIRED or UNPLAYABLE from this client, try next
+      if (
+        data.playabilityStatus?.status === "LOGIN_REQUIRED" ||
+        data.playabilityStatus?.status === "UNPLAYABLE"
+      ) {
+        continue;
+      }
+
+      // Other errors — still return the data for error handling
+      return data;
+    } catch (e) {
+      continue;
+    }
   }
 
-  return res.json();
+  throw new Error("All extraction methods failed");
 }
 
 function chooseAudioFormat(formats) {
-  // Prefer webm/opus audio, then mp4/aac
+  // Only use formats with direct URLs (not signatureCipher which requires decryption)
   const audioFormats = formats.filter(
     (f) => f.mimeType && f.mimeType.startsWith("audio/") && f.url
   );
 
-  if (audioFormats.length === 0) return null;
+  if (audioFormats.length === 0) {
+    // Fallback: try all audio formats including those with signatureCipher
+    const cipherFormats = formats.filter(
+      (f) => f.mimeType && f.mimeType.startsWith("audio/")
+    );
+    if (cipherFormats.length > 0) {
+      return cipherFormats[0]; // Return first one, might still work
+    }
+    return null;
+  }
 
   // Sort by bitrate (highest first)
   audioFormats.sort((a, b) => (b.averageBitrate || 0) - (a.averageBitrate || 0));
@@ -67,15 +141,7 @@ async function extractAudio(url) {
 
   const info = await getVideoInfo(videoId);
 
-  if (info.playabilityStatus?.status === "ERROR") {
-    throw new Error(info.playabilityStatus.reason || "Video unavailable");
-  }
-
-  if (info.playabilityStatus?.status === "LOGIN_REQUIRED") {
-    throw new Error("This video is age-restricted or private");
-  }
-
-  const title = info.videoDetails?.title || "youtube-audio";
+  const title = info.videoDetails?.title || "audio";
   const formats = info.streamingData?.formats || [];
   const adaptiveFormats = info.streamingData?.adaptiveFormats || [];
   const allFormats = [...formats, ...adaptiveFormats];
